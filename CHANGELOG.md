@@ -1,0 +1,55 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
+
+## [Unreleased]
+
+### Added
+
+- Initial release: `Gateway`, `Host`, `Upstream` primitives; `Group`/
+  `Route`/`Use`/`ErrorBoundary`/`NotFound`/`Redirect`/`Response`
+  re-exported directly from `@johnhenry/servable`. Host-based routing
+  compiles to a raw `URLPattern` instance (hostname + pathname), reusing
+  servable's existing "accepts a raw URLPattern for `path`" escape hatch
+  -- no changes needed to servable's own dispatch engine.
+- `Upstream`'s `url=`/`app=`/`handler=` forwarding, with hop-by-hop header
+  stripping (RFC 9110 §7.6.1), Group/Host prefix stripping, and
+  redirect passthrough for the `url=` case.
+- Mounting a Fetch-shaped backend (a compiled servable app, a `dialback`
+  `Server`) as a raw JSX child, no `Upstream` wrapper needed -- detected
+  via `typeof value.fetch === "function"` duck-typing.
+- Literal cross-package JSX support from day one (`Tag = StructuralTag |
+  symbol | string`) -- servable's own `<Route>`/`<Group>` can be written
+  literally inside `<Gateway>`/`<Host>`.
+
+### Fixed (while building this package, in its dependencies)
+
+- `@johnhenry/dialback@0.0.1`: `package.json`'s `exports["."]` had no
+  `types` condition, breaking type resolution under `moduleResolution:
+  "NodeNext"`.
+- `@johnhenry/dialback@0.0.1`: the Node.js README example passed a raw
+  `IncomingMessage` directly to `Server#fetch()`, which throws --
+  `unBoundFetch()` requires a real `Request` instance or a URL string.
+- `@johnhenry/dialback@0.0.2`: `Server`/`Agent` were declared as plain
+  `interface`s (no construct signature) despite being real, constructable
+  classes at runtime -- `new Server(...)` failed to type-check. Also
+  removed `createServer`/`createAgent`, phantom factory-function
+  declarations with no corresponding real export.
+- `@johnhenry/dialback@0.0.3`: `Server`'s `defaultHandler` and
+  `AgentOptions.abort` were typed as synchronous-only, but the runtime
+  already accepts async handlers.
+
+### Known v1 limitations
+
+- `NotFound`/`ErrorBoundary` scope resolution is keyed purely by
+  servable's own pathname-based scope, not by `Host` -- two sibling
+  `Host`s at the same path scope share one `NotFound`/error boundary
+  unless also separated by a real `Group prefix`.
+- Only `Route`/`Upstream` get hostname-qualified matching; `Redirect`
+  does not.
+- `dialback`'s `Server#fetch()` has no way to target one specific
+  connected agent by ID -- use one dedicated `Server` instance per
+  `Upstream` that needs a specific agent.

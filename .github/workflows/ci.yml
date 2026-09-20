@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # engines.node >=26.0.0 -- test the floor version directly rather
+        # than a matrix of now-unsupported older majors.
+        node-version: [26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hostable
+      # servable isn't published yet -- hostable's own dependency on it is
+      # a real (non-optional) file:../servable, which needs a sibling
+      # checkout to resolve. Drop this once servable is published for real
+      # (see how leserve's own equivalent workaround was removed once
+      # @johnhenry/leserve was published).
+      - uses: actions/checkout@v4
+        with:
+          repository: johnhenry/servable
+          path: servable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      # --install-links: without it, npm's file:../servable dependency
+      # doesn't install *servable's own* dependencies at all -- same class
+      # of bug already confirmed (by reproducing it, not just reasoning
+      # about it) for servable's own file:../packfile devDependency. This
+      # flag makes npm treat a file: dependency as a real packed install
+      # instead of a shallow symlink, which resolves its transitive deps
+      # normally.
+      - run: npm ci --install-links
+        working-directory: hostable
+      - run: npm test
+        working-directory: hostable
