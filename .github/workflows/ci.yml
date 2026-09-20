@@ -31,6 +31,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+      # servable's dist/ is gitignored, never committed -- the sibling
+      # checkout only has source, so it has to be built before hostable
+      # can import it (its package.json main/types point at dist/).
+      # --omit=dev skips servable's OWN devDependencies (which include an
+      # unrelated file:../packfile sibling this workflow doesn't check
+      # out) -- only servable's real `dependencies` are needed to build.
+      - run: npm install --omit=dev
+        working-directory: servable
+      - run: npm run build
+        working-directory: servable
       # --install-links: without it, npm's file:../servable dependency
       # doesn't install *servable's own* dependencies at all -- same class
       # of bug already confirmed (by reproducing it, not just reasoning

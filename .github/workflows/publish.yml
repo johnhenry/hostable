@@ -28,6 +28,13 @@ jobs:
           node-version: '26'
           registry-url: 'https://registry.npmjs.org'
 
+      # servable's dist/ is gitignored -- see the identical comment in
+      # ci.yml.
+      - run: npm install --omit=dev
+        working-directory: servable
+      - run: npm run build
+        working-directory: servable
+
       - run: npm ci --install-links
         working-directory: hostable
 

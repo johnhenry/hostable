@@ -91,6 +91,7 @@
     "@johnhenry/fileable": "^0.0.1",
     "@johnhenry/leserve": "^0.0.0",
     "@types/node": "^26.6.1",
+    "@types/ws": "^8.5.0",
     "typescript": "^7.0.2",
     "ws": "^8.18.0"
   }
