@@ -22,6 +22,12 @@ jobs:
         with:
           repository: johnhenry/servable
           path: servable
+      # servable itself has an unpublished file:../packfile devDependency
+      # -- see the identical comment in ci.yml.
+      - uses: actions/checkout@v4
+        with:
+          repository: johnhenry/packfile
+          path: packfile
 
       - uses: actions/setup-node@v4
         with:
@@ -30,7 +36,7 @@ jobs:
 
       # servable's dist/ is gitignored -- see the identical comment in
       # ci.yml.
-      - run: npm install --omit=dev
+      - run: npm ci --install-links
         working-directory: servable
       - run: npm run build
         working-directory: servable

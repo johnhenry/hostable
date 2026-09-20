@@ -28,16 +28,21 @@ jobs:
         with:
           repository: johnhenry/servable
           path: servable
+      # servable itself has an unpublished file:../packfile devDependency
+      # (used by its own examples/tests, not by its build), which needs
+      # its own sibling checkout for `npm ci` to succeed in the servable
+      # checkout below -- same reason hostable needs a servable sibling.
+      - uses: actions/checkout@v4
+        with:
+          repository: johnhenry/packfile
+          path: packfile
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       # servable's dist/ is gitignored, never committed -- the sibling
       # checkout only has source, so it has to be built before hostable
       # can import it (its package.json main/types point at dist/).
-      # --omit=dev skips servable's OWN devDependencies (which include an
-      # unrelated file:../packfile sibling this workflow doesn't check
-      # out) -- only servable's real `dependencies` are needed to build.
-      - run: npm install --omit=dev
+      - run: npm ci --install-links
         working-directory: servable
       - run: npm run build
         working-directory: servable
