@@ -17,6 +17,13 @@
  * browsermesh exports matches the shape as-is -- confirmed by reading
  * mesh-fetch.mjs/sw-routing.mjs directly, not assumed.
  *
+ * Imports from browsermesh-apps use its subpath exports (`./mesh-rpc`,
+ * `./mesh-fetch`, `./mesh-service`, added in
+ * `@johnhenry/browsermesh-apps@0.5.0`), not the top-level `.`
+ * entrypoint -- that one `export *`s from 70+ modules including an
+ * eager, unconditional import of `@johnhenry/browsermesh-transport`,
+ * none of which this example needs.
+ *
  * This example stands up two real Ed25519-identified peers ("alice" the
  * gateway side, "bob" the mesh side) wired over a minimal in-memory bus
  * (not real WebRTC -- that's browsermesh's own later-phase work), same
@@ -30,7 +37,9 @@
  *   curl http://localhost:3015/anything -H "Host: <bob's podId printed at startup>.mesh.local"
  */
 /** @jsxImportSource @johnhenry/hostable */
-import { attachService, createMeshRpcService, createBrowserMeshFetch } from "@johnhenry/browsermesh-apps";
+import { attachService } from "@johnhenry/browsermesh-apps/mesh-service";
+import { createMeshRpcService } from "@johnhenry/browsermesh-apps/mesh-rpc";
+import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
 import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
 import { IdentityWallet, MeshIdentityManager } from "@johnhenry/browsermesh-core";
 import { Gateway, Host, Upstream, fromFetchFn, fromNullableRouter, compile } from "@johnhenry/hostable";

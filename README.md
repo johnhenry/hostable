@@ -204,6 +204,12 @@ shapes it happens to need:
 
 ```ts
 import { fromFetchFn, fromNullableRouter } from "@johnhenry/hostable";
+// Subpath imports (added in @johnhenry/browsermesh-apps@0.5.0) -- not the
+// top-level `.` entrypoint, which pulls in the package's entire 70+-module
+// application layer, including an eager @johnhenry/browsermesh-transport
+// import this integration doesn't need.
+import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
+import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
 
 // Adapts any fetch(url, init)-shaped function into app=.
 const meshFetch = createBrowserMeshFetch(meshRpcApi);

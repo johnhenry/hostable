@@ -6,18 +6,25 @@
  * fromNullableRouter() (src/adapt.ts), with a real HTTP round-trip
  * through a compiled Gateway.
  *
+ * Imports from browsermesh-apps use its subpath exports
+ * (./mesh-rpc, ./mesh-fetch, ./mesh-service -- added in
+ * @johnhenry/browsermesh-apps@0.5.0) rather than the top-level `.`
+ * entrypoint, which `export *`s from 70+ modules including an eager,
+ * unconditional import of @johnhenry/browsermesh-transport -- this
+ * integration needs none of that.
+ *
  * The peer-to-peer wiring below (createPeer/wireNodes) mirrors
  * browsermesh-apps' own test/mesh-fetch.test.mjs fixture, minus the
  * `PeerRegistry`/`MeshACL`/`TrustGraph`/`MeshPeerManager` wiring that
- * fixture also builds -- `PeerRegistry` isn't part of
- * @johnhenry/browsermesh-core's public exports at all (confirmed by
- * reading its index.mjs directly; their own test reaches it only via a
- * same-repo relative import), and `mesh-service.mjs`/`mesh-rpc.mjs`
- * (the two modules this integration actually uses) never call
- * `registry.checkAccess()` themselves -- that's a `cloud-storage.mjs`/
+ * fixture also builds (`PeerRegistry` lives in browsermesh-apps itself,
+ * reachable via `./peer-registry`, not browsermesh-core as an earlier
+ * draft of this file incorrectly assumed) -- `mesh-service.mjs`/
+ * `mesh-rpc.mjs` (the two modules this integration actually uses) never
+ * call `registry.checkAccess()` themselves, that's a `cloud-storage.mjs`/
  * `chunk-replication.mjs` concern, unrelated to plain mesh-rpc request/
- * response. What's real here: Ed25519 identities via
- * `IdentityWallet`/`MeshIdentityManager` (both public exports), a real
+ * response, so the registry wiring is real but unnecessary here. What's
+ * real here: Ed25519 identities via `IdentityWallet`/
+ * `MeshIdentityManager` (from @johnhenry/browsermesh-core), a real
  * `createMeshRpcService()`/`attachService()` pair, connected via a
  * minimal duck-typed in-memory bus (not real WebRTC -- that's
  * browsermesh's own later-phase work, not something this repo needs to
@@ -25,9 +32,10 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { attachService, createMeshRpcService } from "@johnhenry/browsermesh-apps";
-import type { MeshRpcApi } from "@johnhenry/browsermesh-apps";
-import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps";
+import { attachService } from "@johnhenry/browsermesh-apps/mesh-service";
+import { createMeshRpcService } from "@johnhenry/browsermesh-apps/mesh-rpc";
+import type { MeshRpcApi } from "@johnhenry/browsermesh-apps/mesh-rpc";
+import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
 import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
 import { IdentityWallet, MeshIdentityManager } from "@johnhenry/browsermesh-core";
 import { compile } from "../src/compile.js";

@@ -11,20 +11,38 @@
  * `MeshIdentityManager` are pure test-fixture wiring (real Ed25519
  * identities, so `podId` is genuine), typed loosely since their
  * internals aren't what's being tested here.
+ *
+ * Declared against browsermesh-apps' subpath exports (`./mesh-rpc`,
+ * `./mesh-fetch`, `./mesh-service`, `./peer-registry`, added in
+ * @johnhenry/browsermesh-apps@0.5.0), not its top-level `.` entrypoint --
+ * see src/adapt.ts's doc comment for why.
  */
-declare module "@johnhenry/browsermesh-apps" {
+declare module "@johnhenry/browsermesh-apps/mesh-rpc" {
   export interface MeshRpcApi {
     request(podId: string, req: { method?: string; path?: string; headers?: object; body?: unknown }): Promise<{ status: number; headers: object; body: unknown }>;
   }
-  export function createBrowserMeshFetch(
-    meshRpcApi: MeshRpcApi,
-  ): (url: string, init?: { method?: string; headers?: object; body?: unknown }) => Promise<Response>;
-
   export interface MeshRpcServiceOptions {
     onRequest?(req: { podId: string; method: string; path: string; headers: object; body: unknown }): Promise<{ status?: number; headers?: object; body?: unknown }>;
   }
   export function createMeshRpcService(options: MeshRpcServiceOptions): unknown;
+}
+
+declare module "@johnhenry/browsermesh-apps/mesh-fetch" {
+  import type { MeshRpcApi } from "@johnhenry/browsermesh-apps/mesh-rpc";
+  export function createBrowserMeshFetch(
+    meshRpcApi: MeshRpcApi,
+  ): (url: string, init?: { method?: string; headers?: object; body?: unknown }) => Promise<Response>;
+}
+
+declare module "@johnhenry/browsermesh-apps/mesh-service" {
+  import type { MeshRpcApi } from "@johnhenry/browsermesh-apps/mesh-rpc";
   export function attachService(node: unknown, network: unknown, service: unknown): { api: MeshRpcApi };
+}
+
+declare module "@johnhenry/browsermesh-apps/peer-registry" {
+  export class PeerRegistry {
+    constructor(options: { localPodId: string; peerManager: unknown; trustGraph: unknown; acl: unknown });
+  }
 }
 
 declare module "@johnhenry/browsermesh-discovery" {

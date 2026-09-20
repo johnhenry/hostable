@@ -57,6 +57,18 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 - `@johnhenry/dialback@0.0.3`: `Server`'s `defaultHandler` and
   `AgentOptions.abort` were typed as synchronous-only, but the runtime
   already accepts async handlers.
+- `@johnhenry/browsermesh-apps@0.5.0`: added subpath exports (`./mesh-rpc`,
+  `./mesh-fetch`, `./mesh-service`, `./peer-registry`) so a consumer
+  needing only the mesh-rpc layer isn't forced to import the top-level
+  `.` entrypoint, which `export *`s from 70+ modules including an eager,
+  unconditional `@johnhenry/browsermesh-transport` import -- despite that
+  peer dependency being declared `optional: true`. This repo's own
+  `test/browsermesh-adapt.test.ts`/`examples/06-browsermesh` now import
+  via these subpaths and no longer need the six extra devDependencies
+  (`browsermesh-primitives`/`-transport`/`-sync`/`-kernel`/`-netway`,
+  `andbox`) that were only ever needed to satisfy the old eager import.
+  (Also: `PeerRegistry` was already public, in `browsermesh-apps` --
+  not `browsermesh-core` as this file previously, incorrectly, said.)
 
 ### Known v1 limitations
 
