@@ -28,6 +28,18 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
   inside hostable's `<Host>`, three packages in one JSX expression under
   one pragma -- verified for real (`examples/05-nested-jsx`), not just
   reasoned about from the pairwise cases.
+- `fromFetchFn()`/`fromNullableRouter()` (`src/adapt.ts`): two small,
+  generic adapters from "almost FetchLike" shapes into the real thing --
+  a bare `fetch(url, init)`-shaped function, and a `(req) =>
+  Promise<Response|null>` nullable router (the Service-Worker-interceptor
+  convention). Not browsermesh-specific, but that's exactly what
+  `@johnhenry/browsermesh-apps`' `createBrowserMeshFetch()` and
+  `@johnhenry/browsermesh-discovery`'s `MeshFetchRouter#route()` need --
+  neither satisfies `FetchLike` as-is (confirmed by reading their source).
+  Verified against real browsermesh packages: two real Ed25519-identified
+  peers, a real `mesh-rpc` round trip, both adapters exercised end-to-end
+  through a compiled `Gateway` (`test/browsermesh-adapt.test.ts`,
+  `examples/06-browsermesh`).
 
 ### Fixed (while building this package, in its dependencies)
 

@@ -9,6 +9,8 @@ export { linkTo, warn, markdownToHtml, setCookie, sse, streamBody, upgradeWebSoc
 export type { GatewayProps, HostProps, UpstreamProps, UpstreamHandler, Descriptor, DescriptorChild, BaseProps } from "./types.js";
 export { HostableError, isDescriptor, isFetchLike } from "./types.js";
 export type { FetchLike } from "./forward.js";
+export { fromFetchFn, fromNullableRouter } from "./adapt.js";
+export type { FetchFnInit } from "./adapt.js";
 
 export type {
   CompileOptions,

@@ -167,15 +167,19 @@ assets, a JSON API, and a reverse-proxied second domain, all in one tree).
 
 ## Ecosystem integration
 
-`hostable` needs **no special-case code** for either of these -- both
-already fit the generic `Upstream app=`/raw-child mechanism:
+Neither of these gets hostable-specific integration code -- both plug in
+through `Upstream`'s existing `app=`/`handler=` mechanism, though not
+identically: `dialback`'s export already satisfies `FetchLike` directly;
+`browsermesh`'s two exports don't, so they go through two small, generic
+adapters instead (not browsermesh-specific themselves -- see below).
 
 - **[`@johnhenry/dialback`](https://github.com/johnhenry/dialback)**
   (reverse-proxy-over-websockets: an agent dials out, the server dials
   back through that connection to reach it) -- a `Server` instance is
   already Fetch-shaped (`server.fetch(request)`), so forwarding gateway
   traffic to an agent behind NAT/a firewall is just `<Upstream
-  app={dialbackServer} />`. See `examples/03-dialback-tunnel`.
+  app={dialbackServer} />`, no adapter needed. See
+  `examples/03-dialback-tunnel`.
 
   **Known constraint**: `dialback`'s `Server#fetch()` picks a connection
   via its own load-balancing strategy across *all* connected agents --
@@ -183,11 +187,41 @@ already fit the generic `Upstream app=`/raw-child mechanism:
   `Server` instance per `Upstream` that needs a specific agent.
 
 - **[`@johnhenry/browsermesh`](https://github.com/johnhenry/browsermesh)**
-  (peer-to-peer mesh networking for browser Pods) already has its own
-  HTTP-shaped bridges independent of `dialback` --
-  `createBrowserMeshFetch()` and `MeshFetchRouter` -- both fit the same
-  `app=`/`handler=` mechanism without any hostable-specific browsermesh
-  integration.
+  (peer-to-peer mesh networking for browser Pods) has its own HTTP-shaped
+  bridges independent of `dialback`, but **neither satisfies `FetchLike`
+  as-is** (confirmed by reading their source, not assumed):
+  `createBrowserMeshFetch()` is a bare `fetch(url, init)`-shaped
+  *function*, not an object with `.fetch`; `MeshFetchRouter#route()`
+  returns `Response | null` (the Service-Worker-interceptor convention),
+  not always a `Response`. `fromFetchFn()`/`fromNullableRouter()` (below)
+  adapt each into `FetchLike`. See `examples/06-browsermesh` for a real,
+  running mesh round-trip both ways.
+
+### `fromFetchFn` / `fromNullableRouter`
+
+Two small, generic adapters -- not specific to browsermesh, just the two
+shapes it happens to need:
+
+```ts
+import { fromFetchFn, fromNullableRouter } from "@johnhenry/hostable";
+
+// Adapts any fetch(url, init)-shaped function into app=.
+const meshFetch = createBrowserMeshFetch(meshRpcApi);
+<Upstream path="/*" app={fromFetchFn((_url, init) => meshFetch(`mesh://${podId}/greet`, init))} />
+
+// Adapts a (req) => Promise<Response|null> router into app=, with a
+// configurable fallback for null (default: a plain 404).
+const router = new MeshFetchRouter({ onRpc });
+<Host pattern="*.mesh.local">
+  <Upstream path="/*" app={fromNullableRouter(router.route.bind(router))} />
+</Host>
+```
+
+`fromFetchFn` reads a non-GET/HEAD request's body as text before calling
+`fn` (not a raw stream) -- matching how both `createBrowserMeshFetch()`
+and `MeshFetchRouter#route()` already extract a body from `init.body`/a
+real `Request` (read as text, then try `JSON.parse`), since neither
+accepts a stream.
 
 ## Adapters
 
@@ -233,6 +267,11 @@ See [`examples/`](./examples):
   pragma, no separate `compile()` step or `from=`/`app=` indirection for
   the inner layers. The direct payoff of the whole `fileable -> servable
   -> hostable` lineage.
+- `06-browsermesh` -- forwards gateway traffic into a real browsermesh
+  peer two ways: `createBrowserMeshFetch()` via `fromFetchFn()`, and
+  `MeshFetchRouter` via `fromNullableRouter()` paired with `<Host
+  pattern="*.mesh.local">`. Two real Ed25519-identified peers, a real
+  `mesh-rpc` round trip, verified over real HTTP.
 
 ## License
 
