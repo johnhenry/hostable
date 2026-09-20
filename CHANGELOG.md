@@ -23,7 +23,11 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
   via `typeof value.fetch === "function"` duck-typing.
 - Literal cross-package JSX support from day one (`Tag = StructuralTag |
   symbol | string`) -- servable's own `<Route>`/`<Group>` can be written
-  literally inside `<Gateway>`/`<Host>`.
+  literally inside `<Gateway>`/`<Host>`, and this goes a layer deeper:
+  fileable's `<Dir>`/`<File>` nested inside servable's `<Group>` nested
+  inside hostable's `<Host>`, three packages in one JSX expression under
+  one pragma -- verified for real (`examples/05-nested-jsx`), not just
+  reasoned about from the pairwise cases.
 
 ### Fixed (while building this package, in its dependencies)
 

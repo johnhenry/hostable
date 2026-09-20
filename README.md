@@ -138,6 +138,33 @@ markup, and `Descriptor.tag`'s type is the general `symbol` (not
 hostable's own exact `typeof FRAGMENT`) specifically so a sibling
 package's differently-keyed Fragment marker still type-checks.
 
+The same mechanism goes a layer deeper: `fileable`'s `<Dir>`/`<File>` can
+be nested directly inside servable's `<Group>`, which is itself nested
+inside hostable's `<Host>` -- three packages' JSX, one pragma, one
+expression:
+
+```tsx
+/** @jsxImportSource @johnhenry/hostable */
+import { Dir, File } from "@johnhenry/fileable";
+import { Gateway, Host, Group, Route, compile } from "@johnhenry/hostable";
+
+const app = (
+  <Gateway>
+    <Host name="a.example.com">
+      <Group prefix="/static">
+        <Dir name="dist">
+          <File name="index.html">{"<h1>Home</h1>"}</File>
+        </Dir>
+      </Group>
+      <Route path="/api/hello" method="GET">{{ hello: "world" }}</Route>
+    </Host>
+  </Gateway>
+);
+```
+
+See `examples/05-nested-jsx` for the full, verified version (static
+assets, a JSON API, and a reverse-proxied second domain, all in one tree).
+
 ## Ecosystem integration
 
 `hostable` needs **no special-case code** for either of these -- both
@@ -195,11 +222,17 @@ See [`examples/`](./examples):
   mirrors servable's own `07-mount-fileable` example.
 - `03-dialback-tunnel` -- `Upstream app={dialback.Server}`, forwards a
   real request through a real tunnel to a connected `Agent`.
-- `04-full-stack` -- the flagship: `fileable` (static assets, via
-  servable's `Group from=`) + `servable` (a compiled API app) +
-  `hostable` (multi-domain routing + reverse proxy), one running app --
-  the direct payoff of the whole `fileable -> servable -> hostable`
-  lineage.
+- `04-full-stack` -- `fileable` (static assets, via servable's
+  `Group from=`) + `servable` (a separately-compiled API app, mounted as
+  a raw child) + `hostable` (multi-domain routing + reverse proxy), one
+  running app.
+- `05-nested-jsx` -- the flagship: all three layers written as **literal,
+  nested JSX in one expression** -- `<Dir>`/`<File>` (fileable) directly
+  inside `<Group>` (servable) directly inside `<Host>`/`<Gateway>`
+  (hostable), one file, one `@jsxImportSource @johnhenry/hostable`
+  pragma, no separate `compile()` step or `from=`/`app=` indirection for
+  the inner layers. The direct payoff of the whole `fileable -> servable
+  -> hostable` lineage.
 
 ## License
 
