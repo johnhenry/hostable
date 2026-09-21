@@ -39,7 +39,8 @@ import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
 import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
 import { IdentityWallet, MeshIdentityManager } from "@johnhenry/browsermesh-core";
 import { compile } from "../src/compile.js";
-import { Gateway, Host, Upstream } from "../src/components.js";
+import { Gateway, Upstream } from "../src/components.js";
+import { Host } from "@johnhenry/servable";
 import { fromFetchFn, fromNullableRouter } from "../src/adapt.js";
 
 interface Peer {

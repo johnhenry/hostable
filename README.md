@@ -31,34 +31,30 @@ npm install @johnhenry/hostable
 ## Primitives
 
 Mostly **reused, not reimplemented** -- `@johnhenry/servable` is a real
-dependency, and `Group`/`Route`/`Use`/`ErrorBoundary`/`NotFound`/
-`Redirect`/`Response` are re-exported from it directly, unchanged. A
+dependency, and `Group`/`Host`/`Route`/`Use`/`ErrorBoundary`/`NotFound`/
+`Redirect`/`Response` are all re-exported from it directly, unchanged. A
 gateway-level auth check, rate limit, or health-check endpoint is just
 `Use`/`Route`, identical to servable.
 
-Two new primitives:
-
-### `Host`
+`Host` -- the domain-axis scope this package is named after -- used to be
+implemented here as a hostable-only pre-transform. It's a genuine
+`@johnhenry/servable` primitive now (a real Layout-stage scope, the same
+stage `Group`'s own prefix-joining, `NotFound`/`ErrorBoundary` scoping,
+and `linkTo()` already live in) -- see servable's own README, "The
+primitives", for the full writeup. That move fixed a real bug this
+package's earlier implementation had: content mounted inside one `Host`
+(a fileable tree, `Group from="glob"` file-based routing, ...) could leak
+into a sibling `Host` that should never have seen it, since hostable's own
+one-pass pre-transform ran *before* those later pipeline stages created
+the routes it needed to qualify. See servable's CHANGELOG for the full
+writeup (six independent leak points, all from the same root cause).
 
 ```tsx
 <Host name="a.example.com"> ... </Host>
 <Host pattern="*.example.com"> ... </Host>
 ```
 
-Domain-axis scope -- matched against the incoming request's `Host` header
-(embedded in the request's own URL by the Node adapter, same as any other
-real HTTP server). Accumulates into every nested `Route`/`Upstream`'s
-compiled `URLPattern` `hostname` component, exactly parallel to how
-`Group prefix` accumulates the `pathname` component. Wildcard subdomains
-work via `URLPattern`'s own native hostname pattern syntax. Multiple
-sibling `Host`s route independent domains within one `Gateway`.
-
-**Known v1 limitation**: `NotFound`/`ErrorBoundary` scope resolution is
-still keyed purely by servable's own pathname-based scope -- two sibling
-`Host`s at the same path scope (e.g. both directly under `Gateway`, no
-`Group` nesting) share one `NotFound`/error boundary unless also
-separated by a real `Group prefix`. Only `Route`/`Upstream` get
-hostname-qualified matching; `Redirect` does not.
+One genuinely new primitive:
 
 ### `Upstream`
 
@@ -83,13 +79,48 @@ silently 404ing every non-GET request would be wrong for the common case.
   `Proxy-Authenticate`, `Proxy-Authorization`) from both the outgoing
   request and the returned response, and passes redirects through
   unfollowed (`redirect: "manual"`) rather than silently following them
-  on the client's behalf.
+  on the client's behalf. `url="ipfs://<cid>/<path>"` (EXAMPLE) is also
+  recognized -- see "`ipfs://` upstreams" below.
 - **`app`** -- any object shaped `{fetch(request): Promise<Response>}`,
   called in-process, zero network hop. Covers a compiled
   `@johnhenry/servable` dispatcher, a `@johnhenry/dialback` `Server`
   instance, or anything else with a `.fetch` method -- genuinely uniform,
   no per-integration code needed for either.
 - **`handler`** -- full escape hatch, same shape as `Route`'s `handler`.
+
+### `ipfs://` upstreams
+
+`url="ipfs://<cid>/<path>"` (EXAMPLE) reverse-proxies an entire
+domain/prefix straight at an IPFS gateway -- the same idea as
+`@johnhenry/fileable`'s `<File src="ipfs://...">` and
+`@johnhenry/servable`'s `<Route src="ipfs://...">`, one layer up: instead
+of resolving one file, a whole `<Upstream>` forwards everything under its
+matched path.
+
+```tsx
+<Upstream path="/*" url="ipfs://bafybeigdyrzt.../" />
+```
+
+Unlike the other two layers, this can't just be "one more branch in the
+same `fetch()` call" -- `fetch()` has no native `ipfs:` protocol handler
+at all, so the outgoing request's URL is rewritten to a real `https://`
+gateway URL (`${ipfsGateway}${cid}/${path}`) before `fetch()` ever sees
+it, done fresh per request inside the same forwarding handler `url=`
+already uses. Configure the gateway via `compile(tree, { ipfsGateway })`
+(default: `"https://ipfs.io/ipfs/"`) -- the same option name/default/
+semantics as `@johnhenry/fileable`'s `RenderOptions.ipfsGateway` and
+`@johnhenry/servable`'s `CompileOptions.ipfsGateway` (re-exported/passed
+straight through, since hostable's own `CompileOptions` type comes from
+`@johnhenry/servable`).
+
+Public gateways (`ipfs.io`, `dweb.link`, `w3s.link`, `nftstorage.link`)
+currently return `429` for direct server-side (non-browser) fetches --
+verified directly, they're migrating to service-worker-only access. Point
+`ipfsGateway` at your own gateway/pinning service in production, or a
+local mock in tests (see `test/upstream-url.test.ts`'s `ipfs://` cases).
+There's no caching layer here either, same as `url=` in general: every
+matching request re-fetches through the gateway; compose a caching `Use`
+around it if that cost matters.
 
 ### Mounting an app without `Upstream` at all
 
@@ -152,6 +183,12 @@ const app = (
   <Gateway>
     <Host name="a.example.com">
       <Group prefix="/static">
+        {/* "dist" IS part of the URL -- this file serves at
+            https://a.example.com/static/dist/index.html. See servable's
+            README, "Mounting a fileable tree", for the full naming rule
+            (including the Fragment-based way to mount without a folder
+            name at all, and mounting a bare <File> -- named or not --
+            with no <Dir> wrapper). */}
         <Dir name="dist">
           <File name="index.html">{"<h1>Home</h1>"}</File>
         </Dir>
@@ -164,6 +201,98 @@ const app = (
 
 See `examples/05-nested-jsx` for the full, verified version (static
 assets, a JSON API, and a reverse-proxied second domain, all in one tree).
+
+Fileable descriptors are recognized the same way here as in plain servable
+-- as a child of `<Group>`/`<Router>` (or that `Group`'s own `from=`), never
+as a child of `<Route>`/`<Upstream>`. Putting one under `<Route>` throws the
+same clear compile-time error servable's own compile stage throws (hostable
+delegates to servable's `compile()` for everything below `<Host>`, so this
+isn't reimplemented here) -- use `<Route>`'s own body/`src=` handling for a
+single file's content at one route instead.
+
+### Fragments work at every layer
+
+`<>...</>` works directly under `<Host>`/`<Gateway>` here, the same as it
+does under servable's own `<Router>`/`<Group>`, and the same as fileable's
+own `<>...</>` works as a mount root (see servable's README, "Mounting a
+fileable tree"). All three compose in one nested tree without conflicting:
+
+```tsx
+/** @jsxImportSource @johnhenry/hostable */
+import { Dir, File } from "@johnhenry/fileable";
+import { Gateway, Host, Group, Route, compile } from "@johnhenry/hostable";
+
+// A fileable Fragment is genuinely necessary here: Group's `from=` only
+// ever accepts ONE value, so mounting multiple named files with no
+// enclosing folder name in the URL requires bundling them into that one
+// slot -- see servable's README, "Mounting a fileable tree".
+const site = (
+  <>
+    <File name="index.html">{"home"}</File>
+    <File name="about.html">{"about"}</File>
+  </>
+);
+
+// A component function returning a Fragment is the OTHER place Fragment
+// earns its keep: a function can only return one value, and Fragment is
+// what lets that one value stand for several sibling Routes -- reusable
+// across as many Hosts as you embed it in, not copy-pasted per domain.
+// (`<Host>`'s own children already accept any number of direct siblings
+// with no wrapping needed at all -- wrapping a FIXED list of children in
+// `<>...</>` for no other reason doesn't do anything, so that's not what
+// this is demonstrating.)
+function CommonRoutes() {
+  return (
+    <>
+      <Route path="/health" method="GET">{{ ok: true }}</Route>
+      <Route path="/version" method="GET">{{ version: "1.0.0" }}</Route>
+    </>
+  );
+}
+
+const app = (
+  <Gateway>
+    <Host name="a.example.com">
+      <Group prefix="/static">{site}</Group>
+      <CommonRoutes />
+    </Host>
+    <Host name="b.example.com">
+      <CommonRoutes />
+    </Host>
+  </Gateway>
+);
+```
+
+`<CommonRoutes />`, capitalized -- not `<commonRoutes />`. This isn't
+specific to this package: every JSX transform decides how to compile a tag
+name from its capitalization alone, before any custom `jsx()` factory ever
+runs -- a lowercase-starting tag always compiles to a bare string
+(`jsx("commonRoutes", {})`), which this family's `jsx()` then treats as an
+unrecognized markup tag and rejects (`<commonRoutes> is not a servable
+primitive here`, confirmed by actually trying it); an uppercase-starting
+tag compiles to a lookup of the `CommonRoutes` binding
+(`jsx(CommonRoutes, {})`), which `jsx()` already has a branch for --
+`typeof type === "function"` -- and calls directly. Same convention this
+whole ecosystem already uses for `Dir`/`File`/`Route`/`Group`/`Host`
+themselves.
+
+hostable's own exported `Fragment` (from `@johnhenry/hostable/jsx-runtime`,
+what `<>...</>` compiles to under this package's `@jsxImportSource`) is
+deliberately *servable's* Fragment symbol, re-exported rather than
+redefined -- hostable has no build/resolve/layout pipeline of its own (it
+hands everything to servable's real `compile()`, see "Literal cross-package
+JSX" above), so a genuinely distinct hostable Fragment symbol would need
+servable's own `build()` to recognize it too, which it never would (each
+layer's Fragment/`FILEABLE_DESCRIPTOR` detection is scoped to its own,
+`Symbol.for()`-registry-keyed marker -- see servable's README's own
+`Symbol.for("fileable.descriptor")` note). An earlier version of this
+package *did* mint its own distinct `Symbol.for("hostable.fragment")` --
+real bug, caught by actually compiling and fetching a `<>...</>` under this
+pragma rather than just reasoning about the symbol keys statically: it
+threw `<Symbol(hostable.fragment)> is not a servable primitive here` the
+moment it was used for anything beyond being re-exported. Fixed; see
+`test/fragment.test.tsx` for the regression coverage (both the standalone
+case and the fileable/hostable-Fragments-composed-together case above).
 
 ## Ecosystem integration
 

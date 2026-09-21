@@ -9,12 +9,13 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
-- Initial release: `Gateway`, `Host`, `Upstream` primitives; `Group`/
-  `Route`/`Use`/`ErrorBoundary`/`NotFound`/`Redirect`/`Response`
-  re-exported directly from `@johnhenry/servable`. Host-based routing
-  compiles to a raw `URLPattern` instance (hostname + pathname), reusing
-  servable's existing "accepts a raw URLPattern for `path`" escape hatch
-  -- no changes needed to servable's own dispatch engine.
+- Initial release: `Gateway`, `Upstream` primitives (this package's own);
+  `Group`/`Host`/`Route`/`Use`/`ErrorBoundary`/`NotFound`/`Redirect`/
+  `Response` re-exported directly from `@johnhenry/servable` -- `Host`
+  itself now lives in servable's own Layout stage rather than being
+  implemented here (see the "Fixed" entry below for why), so this
+  package's own compile step only ever rewrites `Gateway`/`Upstream`/a
+  raw Fetch-shaped child.
 - `Upstream`'s `url=`/`app=`/`handler=` forwarding, with hop-by-hop header
   stripping (RFC 9110 §7.6.1), Group/Host prefix stripping, and
   redirect passthrough for the `url=` case.
@@ -40,6 +41,85 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
   peers, a real `mesh-rpc` round trip, both adapters exercised end-to-end
   through a compiled `Gateway` (`test/browsermesh-adapt.test.ts`,
   `examples/06-browsermesh`).
+
+- `url="ipfs://<cid>/<path>"` (EXAMPLE) on `Upstream`: reverse-proxies an
+  entire domain/prefix straight at an IPFS gateway, the same idea as
+  `@johnhenry/fileable`'s `<File src="ipfs://...">` and
+  `@johnhenry/servable`'s `<Route src="ipfs://...">` one layer up. Unlike
+  those two, `fetch()` has no native `ipfs:` protocol handler at all, so
+  this can't be "one more branch in the same fetch call" -- the outgoing
+  request's URL is rewritten to a real `https://` gateway URL
+  (`${ipfsGateway}${cid}/${path}`) before `fetch()` ever sees it, done
+  fresh per request in `forward.ts`'s `createUrlUpstream` (mirroring
+  servable's own per-request `resolveAsset()`, not fileable's
+  resolve-once-at-compile-time model). Configured via `compile(tree, {
+  ipfsGateway })`, same option name/default (`"https://ipfs.io/ipfs/"`)
+  as the other two layers -- `CompileOptions` is imported directly from
+  `@johnhenry/servable`, so the type was already available here, just not
+  yet threaded through this package's own pre-transform. Verified against
+  a real local `node:http` mock gateway, not a live public one: direct
+  `curl` testing confirmed `ipfs.io`/`dweb.link`/`w3s.link`/
+  `nftstorage.link` currently 429 direct server-side fetches (see
+  `test/upstream-url.test.ts`'s `ipfs://` cases).
+
+### Fixed (in this package itself)
+
+- **`Group`'s own transform silently dropped `ipfsGateway` from the
+  context it passes to its children.** `transformChild`'s `"group"` case
+  builds a fresh `TransformCtx` for everything nested inside it (to
+  accumulate the prefix), but constructed it as `{ pathPrefix }` only --
+  any `Upstream url="ipfs://..."` nested inside a `Group` silently fell
+  back to the default public gateway instead of the one passed to
+  `compile(tree, { ipfsGateway })`, regardless of `Group` nesting depth.
+  Caught by a real failing test (a local mock gateway server that should
+  never have been reachable getting bypassed in favor of a real `429`
+  from the live default), not by reasoning about the transform in the
+  abstract. Fixed by carrying `ctx.ipfsGateway` through both places that
+  construct a new `TransformCtx` (`"group"` and `"gateway"`, the tree
+  root) instead of just the one (`"gateway"`) added first.
+
+- **`Host` moved into `@johnhenry/servable` itself, fixing a real cross-
+  domain content leak.** `Host` was originally implemented entirely in
+  this package, as a one-pass pre-transform run *before* handing the tree
+  to servable's own `compile()`. That meant any route created by a LATER
+  servable pipeline stage -- a mounted fileable tree, `Group from="glob"`
+  file-based routing, a promise-valued `path`, a literal `<Router>` nested
+  inside a `<Host>` -- simply didn't exist yet when hostable's transform
+  ran, so it was never hostname-qualified at all. Confirmed empirically,
+  not just reasoned about: a `<Host>` that should only reverse-proxy
+  elsewhere via `Upstream` was ALSO serving a sibling `<Host>`'s mounted
+  static files at the same path. Two more real breakages shared the same
+  root cause: a bare `path="/"` under a `Group` inside a `Host` incorrectly
+  404'd (hostable's own path-joining never replicated servable Layout's
+  trailing-slash handling), and `linkTo()` threw for any route inside a
+  `Host` (hostable's rewrite produced a new descriptor object, breaking
+  the descriptor-identity lookup `linkTo()` relies on). Fixed by moving
+  `Host` into servable's own Layout stage -- the stage that runs *after*
+  every other stage has finished expanding the tree, and already owns
+  `Group`'s prefix-joining, `NotFound`/`ErrorBoundary` scoping, and
+  `linkTo()`. This package's own `Host` is gone; `@johnhenry/servable`'s
+  `Host` is re-exported directly instead (same as `Group`/`Route`/etc.),
+  and `compile.ts` shrank to strictly leaf-local rewrites (`Gateway`,
+  `Upstream`, a raw Fetch-shaped child) plus `Upstream`'s own runtime
+  prefix-stripping, which is a genuinely different, request-time concern
+  from how the match pattern gets compiled. See servable's own CHANGELOG
+  for the full six-leak enumeration, and `test/host.test.ts` here for the
+  end-to-end regression (a real mounted fileable tree, a real sibling
+  `Host` with a real `http.createServer` reverse-proxy target, proving the
+  leak is gone against a real compiled gateway and real `fetch()` calls).
+- `<>...</>` (Fragment) written under this package's own
+  `@jsxImportSource @johnhenry/hostable` pragma threw
+  `<Symbol(hostable.fragment)> is not a servable primitive here` the
+  moment it was actually used for anything beyond being re-exported --
+  this package minted its own, distinct `Symbol.for("hostable.fragment")`,
+  but has no build/resolve/layout pipeline of its own (everything below
+  `<Host>` is handed to servable's real `compile()`), and servable's own
+  `build()` only ever flattens its *own* Fragment symbol. Found by actually
+  compiling and fetching a `<>...</>`-containing tree, not by reasoning
+  about the `Symbol.for()` keys statically. Fixed by making hostable's
+  `FRAGMENT` deliberately the *same* symbol as servable's own (re-exported,
+  not redefined) -- see `types.ts`'s `FRAGMENT` doc comment, and the
+  README's "Fragments work at every layer" section.
 
 ### Fixed (while building this package, in its dependencies)
 
@@ -72,12 +152,6 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ### Known v1 limitations
 
-- `NotFound`/`ErrorBoundary` scope resolution is keyed purely by
-  servable's own pathname-based scope, not by `Host` -- two sibling
-  `Host`s at the same path scope share one `NotFound`/error boundary
-  unless also separated by a real `Group prefix`.
-- Only `Route`/`Upstream` get hostname-qualified matching; `Redirect`
-  does not.
 - `dialback`'s `Server#fetch()` has no way to target one specific
   connected agent by ID -- use one dedicated `Server` instance per
   `Upstream` that needs a specific agent.

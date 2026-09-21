@@ -1,16 +1,22 @@
 /**
- * The full fileable -> servable -> hostable lineage in one running app:
- * fileable describes static assets, servable compiles them (plus a JSON
- * API route) into one app, and hostable routes across *two* domains --
- * one serving that mounted app, the other reverse-proxying to a separate
- * backend -- demonstrating why hostable exists at all: servable compiles
- * one app; hostable is what puts several of them (plus proxied backends)
- * behind one gateway, addressed by domain.
+ * The full fileable -> servable -> hostable lineage in one running app --
+ * but unlike examples/05-nested-jsx (all three layers under ONE pragma, in
+ * ONE expression), this one keeps servable's own compile() as a real,
+ * separate step: fileable's `<Dir>`/`<File>` are written literally nested
+ * inside servable's `<Router>`/`<Group>` JSX (same nested-JSX mechanism
+ * 05 uses, one layer down), that whole tree is compiled into a real
+ * `(Request) => Response` app on its own, and only THEN is the already-
+ * compiled app mounted into hostable, alongside a completely separate
+ * reverse-proxied backend on a second domain. This is the OTHER valid
+ * composition shape (compile-then-mount, vs. nest-everything-in-one-tree)
+ * -- demonstrating why hostable exists at all: servable compiles one app;
+ * hostable is what puts several of them (plus proxied backends) behind
+ * one gateway, addressed by domain.
  *
  * Run with:
  *   npm run build && node dist/examples/04-full-stack/server.js
  * Then (-H sets the Host header directly, avoiding any real or fake DNS):
- *   curl http://localhost:3013/ -H "Host: app.example.com"
+ *   curl http://localhost:3013/static/dist/index.html -H "Host: app.example.com"
  *   curl http://localhost:3013/api/hello -H "Host: app.example.com"
  *   curl http://localhost:3013/anything -H "Host: proxy.example.com"
  */
@@ -19,14 +25,13 @@ import http from "node:http";
 import { Dir, File } from "@johnhenry/fileable";
 import { Router, Group, Route, compile as compileServable } from "@johnhenry/servable";
 
-const site = Dir({
-  name: "dist",
-  children: [File({ name: "index.html", children: ["<h1>Hello from the mounted servable app</h1>"] })],
-});
-
 const app = await compileServable(
   <Router>
-    <Group prefix="/static" from={site} />
+    <Group prefix="/static">
+      <Dir name="dist">
+        <File name="index.html">{"<h1>Hello from the mounted servable app</h1>"}</File>
+      </Dir>
+    </Group>
     <Route path="/api/hello" method="GET">
       {{ hello: "world" }}
     </Route>

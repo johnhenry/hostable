@@ -114,6 +114,73 @@ test("url= passes redirects through unfollowed (redirect: manual)", async () => 
   );
 });
 
+test('url="ipfs://<cid>/<path>" (EXAMPLE) reverse-proxies through the configured gateway, Group prefix stripped first', async () => {
+  // Real public IPFS gateways (ipfs.io, dweb.link, w3s.link, nftstorage.link)
+  // currently 429 direct server-side fetches (migrating to service-worker-only
+  // access) -- verified directly via curl, same finding fileable's and
+  // servable's own ipfs:// tests are built around. A real local node:http
+  // server stands in for the gateway here for the same reason.
+  const CID = "bafyhostabletest";
+  await withBackend(
+    (req, res) => {
+      if (req.url === `/ipfs/${CID}/logo.png`) {
+        res.writeHead(200, { "content-type": "image/png" });
+        res.end("fake-png-bytes");
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    },
+    async (baseUrl) => {
+      const tree = Gateway({
+        children: Group({ prefix: "/assets", children: Upstream({ path: "/*", url: `ipfs://${CID}` }) }),
+      });
+      const compiled = await compile(tree, { ipfsGateway: `${baseUrl}/ipfs/` });
+      const res = await compiled.fetch(new Request("http://x/assets/logo.png"));
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get("content-type")!, /image\/png/);
+      assert.equal(await res.text(), "fake-png-bytes");
+    },
+  );
+});
+
+test('url="ipfs://<cid>/<base>" (EXAMPLE) joins a fixed base path with the forwarded request path', async () => {
+  const CID = "bafyhostabletest2";
+  await withBackend(
+    (req, res) => {
+      if (req.url === `/ipfs/${CID}/site/deep/file.txt`) {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("deep file");
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    },
+    async (baseUrl) => {
+      const tree = Gateway({ children: Upstream({ path: "/*", url: `ipfs://${CID}/site` }) });
+      const compiled = await compile(tree, { ipfsGateway: `${baseUrl}/ipfs/` });
+      const res = await compiled.fetch(new Request("http://x/deep/file.txt"));
+      assert.equal(res.status, 200);
+      assert.equal(await res.text(), "deep file");
+    },
+  );
+});
+
+test('url="ipfs://..." (EXAMPLE) surfaces a real gateway error (e.g. missing CID) as-is, not swallowed', async () => {
+  await withBackend(
+    (_req, res) => {
+      res.writeHead(404);
+      res.end();
+    },
+    async (baseUrl) => {
+      const tree = Gateway({ children: Upstream({ path: "/*", url: "ipfs://nope" }) });
+      const compiled = await compile(tree, { ipfsGateway: `${baseUrl}/ipfs/` });
+      const res = await compiled.fetch(new Request("http://x/missing.png"));
+      assert.equal(res.status, 404);
+    },
+  );
+});
+
 test("<Upstream> throws if more than one of url/app/handler is set", async () => {
   const tree = Gateway({ children: Upstream({ path: "/*", url: "http://x", handler: async () => new Response("x") }) });
   await assert.rejects(() => compile(tree));

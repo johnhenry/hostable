@@ -14,9 +14,10 @@
  *
  * Run with:
  *   npm run build && node dist/examples/05-nested-jsx/server.js
- * Then:
- *   curl http://localhost:3014/static/ -H "Host: nested.example.com"
- *   curl http://localhost:3014/static/about/index.html -H "Host: nested.example.com"
+ * Then (the mounted Dir's own name, "dist", IS part of the URL -- see
+ * servable's README, "Mounting a fileable tree"):
+ *   curl http://localhost:3014/static/dist -H "Host: nested.example.com"   # no trailing slash -- posixDirname never adds one except for the true root
+ *   curl http://localhost:3014/static/dist/about/index.html -H "Host: nested.example.com"
  *   curl http://localhost:3014/api/hello -H "Host: nested.example.com"
  *   curl http://localhost:3014/anything -H "Host: proxy.example.com"
  */
@@ -41,7 +42,7 @@ const app = (
       <Group prefix="/static">
         {/* fileable JSX, nested directly inside servable's Group, nested inside hostable's Host -- three packages, one tree */}
         <Dir name="dist">
-          <File name="index.html">{"<h1>Home</h1><a href=\"/static/about/index.html\">About</a>"}</File>
+          <File name="index.html">{"<h1>Home</h1><a href=\"/static/dist/about/index.html\">About</a>"}</File>
           <Dir name="about">
             <File name="index.html">{"<h1>About</h1>"}</File>
           </Dir>

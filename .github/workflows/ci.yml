@@ -36,9 +36,24 @@ jobs:
         with:
           repository: johnhenry/packfile
           path: packfile
+      # servable also has an unpublished file:../fileable devDependency
+      # (used by its own mount-fileable tests, not by its build), for the
+      # same reason as the packfile sibling above.
+      - uses: actions/checkout@v4
+        with:
+          repository: johnhenry/fileable
+          path: fileable
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+      # fileable's dist/ is gitignored, never committed -- must be built
+      # before servable's own npm ci below, since servable's own
+      # file:../fileable devDependency needs fileable's dist/ (not just
+      # its source) to resolve.
+      - run: npm ci --install-links
+        working-directory: fileable
+      - run: npm run build
+        working-directory: fileable
       # servable's dist/ is gitignored, never committed -- the sibling
       # checkout only has source, so it has to be built before hostable
       # can import it (its package.json main/types point at dist/).

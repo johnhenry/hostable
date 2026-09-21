@@ -6,29 +6,31 @@
  * tags, function components) is evaluated immediately, mirroring the JSX
  * call tree 1:1. Mirrors fileable's/servable's jsx-runtime.ts exactly.
  *
- * `gateway`/`host`/`upstream` are reserved and NOT treated as structural
- * when written as bare lowercase tags -- authoring them directly throws.
- * `Gateway`/`Host`/`Upstream`, imported from "@johnhenry/hostable" (see
- * components.ts), are the only supported way to reach the three new
- * primitives. `Group`/`Route`/`Use`/`ErrorBoundary`/`NotFound`/`Redirect`/
- * `Response` (re-exported from @johnhenry/servable) are NOT re-declared as
- * reserved here -- writing `<Route>` under this pragma already works via
- * the generic function-typed-tag passthrough below, since `Route` is a
- * real function reference, not a bare string. A bare lowercase `<route>`
- * typo would not get a friendly reserved-tag error this way (falls
- * through to the generic-markup branch instead) -- the same mistake made
- * through servable's own pragma directly still throws correctly.
+ * `gateway`/`upstream` are reserved and NOT treated as structural when
+ * written as bare lowercase tags -- authoring them directly throws.
+ * `Gateway`/`Upstream`, imported from "@johnhenry/hostable" (see
+ * components.ts), are the only supported way to reach hostable's two own
+ * new primitives. `Group`/`Host`/`Route`/`Use`/`ErrorBoundary`/`NotFound`/
+ * `Redirect`/`Response` (re-exported from @johnhenry/servable -- `Host`
+ * moved into that list too, see types.ts's module doc comment) are NOT
+ * re-declared as reserved here -- writing `<Host>` under this pragma
+ * already works via the generic function-typed-tag passthrough below,
+ * since `Host` is a real function reference, not a bare string. A bare
+ * lowercase `<host>` typo would not get a friendly reserved-tag error this
+ * way (falls through to the generic-markup branch instead) -- the same
+ * mistake made through servable's own pragma directly still throws
+ * correctly, same as any other re-exported primitive.
  */
 import type { Descriptor, DescriptorChild, Tag } from "./types.js";
 import { FRAGMENT, HostableError } from "./types.js";
 
+/** Deliberately servable's own Fragment symbol, not a distinct one -- see FRAGMENT's own doc comment in types.ts for why. */
 export const Fragment = FRAGMENT;
 
 type ComponentFn = (props: Record<string, unknown>) => unknown;
 
 const RESERVED_TAGS: Record<string, string> = {
   gateway: "Gateway",
-  host: "Host",
   upstream: "Upstream",
 };
 

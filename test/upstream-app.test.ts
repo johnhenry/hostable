@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compile as compileHostable } from "../src/compile.js";
-import { Gateway, Host, Upstream } from "../src/components.js";
-import { Group, Route, Router, compile as compileServable } from "@johnhenry/servable";
+import { Gateway, Upstream } from "../src/components.js";
+import { Group, Host, Route, Router, compile as compileServable } from "@johnhenry/servable";
 
 async function realServableApp() {
   return compileServable(

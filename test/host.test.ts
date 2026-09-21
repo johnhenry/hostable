@@ -1,12 +1,60 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
+import { Dir, File } from "@johnhenry/fileable";
 import { compile } from "../src/compile.js";
-import { Gateway, Host, Upstream } from "../src/components.js";
-import { Group, Route } from "@johnhenry/servable";
+import { Gateway, Upstream } from "../src/components.js";
+import { Group, Host, Route } from "@johnhenry/servable";
 
 function req(host: string, path: string): Request {
   return new Request(`http://${host}${path}`);
 }
+
+async function withBackend(
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+  run: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const server = http.createServer(handler);
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const port = (server.address() as { port: number }).port;
+  try {
+    await run(`http://localhost:${port}`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+// --- The original bug, end to end: fileable-mounted static content in one
+// Host must not leak into a sibling Host that only reverse-proxies
+// elsewhere. Verified against a real http.createServer backend and a real
+// compiled gateway, not a stand-in Route -- this is the exact shape
+// examples/05-nested-jsx and examples/01-multi-domain actually run. ---
+test("fileable-mounted content in one Host does not leak into a sibling Host's real Upstream reverse-proxy", async () => {
+  await withBackend(
+    (req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end(`legacy backend saw ${req.url}`);
+    },
+    async (baseUrl) => {
+      const site = Dir({ name: "dist", children: [File({ name: "index.html", children: ["<h1>Home</h1>"] })] });
+      const tree = Gateway({
+        children: [
+          Host({ name: "nested.example.com", children: Group({ prefix: "/static", children: site }) }),
+          Host({ name: "proxy.example.com", children: Upstream({ path: "/*", url: `${baseUrl}/` }) }),
+        ],
+      });
+      const compiled = await compile(tree);
+
+      const correct = await compiled.fetch(req("nested.example.com", "/static/dist/index.html"));
+      assert.equal(await correct.text(), "<h1>Home</h1>");
+
+      // The actual regression: this used to also return the static
+      // content (200, "<h1>Home</h1>") instead of reaching the proxy.
+      const shouldProxy = await compiled.fetch(req("proxy.example.com", "/static/dist/index.html"));
+      assert.equal(await shouldProxy.text(), "legacy backend saw /static/dist/index.html");
+    },
+  );
+});
 
 test("a Route inside a Host only matches that Host's requests", async () => {
   const tree = Gateway({

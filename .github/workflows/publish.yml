@@ -28,11 +28,26 @@ jobs:
         with:
           repository: johnhenry/packfile
           path: packfile
+      # servable itself also has an unpublished file:../fileable
+      # devDependency -- see the identical comment in ci.yml.
+      - uses: actions/checkout@v4
+        with:
+          repository: johnhenry/fileable
+          path: fileable
 
       - uses: actions/setup-node@v4
         with:
           node-version: '26'
           registry-url: 'https://registry.npmjs.org'
+
+      # fileable's dist/ is gitignored -- see the identical comment in
+      # ci.yml. Must be built before servable's own npm ci below, since
+      # servable's file:../fileable devDependency needs fileable's dist/
+      # (not just its source) to resolve.
+      - run: npm ci --install-links
+        working-directory: fileable
+      - run: npm run build
+        working-directory: fileable
 
       # servable's dist/ is gitignored -- see the identical comment in
       # ci.yml.
