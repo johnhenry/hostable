@@ -1,5 +1,9 @@
 # hostable
 
+[![npm version](https://img.shields.io/npm/v/%40johnhenry%2Fhostable.svg)](https://www.npmjs.com/package/@johnhenry/hostable)
+[![CI](https://github.com/johnhenry/hostable/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/hostable/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/%40johnhenry%2Fhostable.svg)](LICENSE)
+
 Declaratively describe an API gateway using JSX -- routes across multiple
 domains and backend services by `Host` header, on top of
 [`@johnhenry/servable`](https://github.com/johnhenry/servable)'s single-app
@@ -10,6 +14,19 @@ Third package in the `fileable -> servable -> hostable` lineage:
 filesystem artifacts, `servable` compiles JSX into *one* app's dispatcher,
 `hostable` is the layer above that -- routing across a *fleet* of apps and
 backends, addressed by domain as well as path.
+
+## Contents
+
+- [Installation](#installation)
+- [The governing rule](#the-governing-rule)
+- [Primitives](#primitives)
+- [Literal cross-package JSX](#literal-cross-package-jsx)
+- [Ecosystem integration](#ecosystem-integration)
+- [Adapters](#adapters)
+- [Non-goals](#non-goals)
+- [Adding a new primitive](#adding-a-new-primitive)
+- [Examples](#examples)
+- [License](#license)
 
 ## Installation
 
@@ -380,6 +397,62 @@ const handle = serve(compiled, { port: 3000 });
   servable already used to reject one).
 - No built-in DNS/Consul-style service discovery -- `url=`/`app=` are
   static per compile; `handler=` is the dynamic-resolution escape hatch.
+
+## Adding a new primitive
+
+This package only has one new leaf (`Upstream`) plus the reused
+`Gateway` root -- most capability growth here isn't a new *primitive* at
+all, it's a new *forwarding mechanism* on `Upstream` itself (a new
+`url=` scheme, a new backend shape for `app=`). The real worked example
+in this package's own history is `url="ipfs://<cid>/<path>"` support
+(see CHANGELOG's "Unreleased" entry), which is the right template
+because it's the harder of the two cases: unlike `https://` (already
+just `fetch()`), `ipfs:` has no native `fetch()` protocol handler at
+all, so it can't be "one more branch inside the same call" the way
+`@johnhenry/fileable`'s `loadSrc()` and `@johnhenry/servable`'s
+`resolveAsset()` handle their own `ipfs://` support. It touches:
+
+1. **`src/forward.ts`** -- `rewriteIpfsUrl(target, gateway)` translates
+   `ipfs://<cid>/<path>` into a real `${gateway}<cid>/<path>` URL
+   *before* `fetch()` ever sees it. `createUrlUpstream()` checks
+   `targetUrl.protocol === "ipfs:"` and rewrites up front, done fresh
+   per request inside the same forwarding handler `url=` already builds
+   -- not a compile-time rewrite, since the target is only known once a
+   request actually arrives. `DEFAULT_IPFS_GATEWAY` mirrors
+   `@johnhenry/fileable`/`@johnhenry/servable`'s own default
+   (`"https://ipfs.io/ipfs/"`).
+2. **`src/compile.ts`'s `TransformCtx`** -- gained an `ipfsGateway?:
+   string` field, threaded through `transformChildren()`/
+   `transformUpstream()` down to `resolveUpstreamHandler()` the same way
+   `pathPrefix` already is. This is the one part that isn't boilerplate:
+   `Upstream` handlers (including any `url="ipfs://..."` forwarding
+   target) are built during hostable's own pre-transform, which runs
+   *before* servable's own `compile()` -- and therefore before
+   servable's own `ipfsGateway` option would normally apply -- so the
+   option has to be threaded down through this package's private
+   `TransformCtx` explicitly rather than picked up for free. No new type
+   was needed for the public option itself: `CompileOptions` is imported
+   directly from `@johnhenry/servable` (`compile(tree, options:
+   CompileOptions)`), so `options.ipfsGateway` was already there: only
+   `compile()`'s own `rootCtx` construction needed the one extra field
+   (`{ pathPrefix: "", ipfsGateway: options.ipfsGateway }`).
+3. **Real tests against a local mock gateway, not a live one**
+   (`test/upstream-url.test.ts`) -- a real `node:http` server stands in
+   for the gateway (`http.createServer(handler)`), because every major
+   public IPFS gateway (`ipfs.io`, `dweb.link`, `w3s.link`,
+   `nftstorage.link`) currently rejects direct server-side fetches with
+   `429`, confirmed by direct `curl` testing, not assumed. Three cases:
+   the happy path (`Group prefix` stripped first, then forwarded through
+   `${baseUrl}/ipfs/<cid>/...`), a fixed base path joined with the
+   forwarded request path, and a real gateway error (missing CID)
+   surfacing as-is rather than being swallowed.
+
+No `types.ts`/`jsx-runtime.ts`/`components.ts` changes at all for this
+one, since it's a new *behavior* inside an existing leaf's existing
+`url=` prop, not a new tag -- contrast with `@johnhenry/servable`'s own
+"Adding a new primitive" section (a genuinely new tag, `Host`, which
+*does* touch `RESERVED_TAGS`/`StructuralTag`/a new factory) for when a
+new primitive is warranted instead.
 
 ## Examples
 
