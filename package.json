@@ -75,7 +75,7 @@
   ],
   "author": "John Henry",
   "dependencies": {
-    "@johnhenry/servable": "file:../servable",
+    "@johnhenry/servable": "^0.0.0",
     "urlpattern-polyfill": "^10.0.0"
   },
   "peerDependencies": {
@@ -91,7 +91,7 @@
     "@johnhenry/browsermesh-core": "^0.3.0",
     "@johnhenry/browsermesh-discovery": "^0.0.5",
     "@johnhenry/dialback": "^0.0.3",
-    "@johnhenry/fileable": "^0.0.1",
+    "@johnhenry/fileable": "^0.0.2",
     "@johnhenry/leserve": "^0.0.0",
     "@types/node": "^26.6.1",
     "@types/ws": "^8.5.0",
