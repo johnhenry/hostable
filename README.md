@@ -4,6 +4,8 @@
 [![CI](https://github.com/johnhenry/hostable/actions/workflows/ci.yml/badge.svg)](https://github.com/johnhenry/hostable/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/%40johnhenry%2Fhostable.svg)](LICENSE)
 
+Full documentation: [opensource.johnhenry.me/hostable](https://opensource.johnhenry.me/hostable/)
+
 Declaratively describe an API gateway using JSX -- routes across multiple
 domains and backend services by `Host` header, on top of
 [`@johnhenry/servable`](https://github.com/johnhenry/servable)'s single-app
@@ -21,11 +23,11 @@ backends, addressed by domain as well as path.
 - [The governing rule](#the-governing-rule)
 - [Primitives](#primitives)
 - [Literal cross-package JSX](#literal-cross-package-jsx)
-- [Ecosystem integration](#ecosystem-integration)
 - [Adapters](#adapters)
 - [Non-goals](#non-goals)
 - [Adding a new primitive](#adding-a-new-primitive)
 - [Examples](#examples)
+- [Family](#family)
 - [License](#license)
 
 ## Installation
@@ -311,70 +313,6 @@ moment it was used for anything beyond being re-exported. Fixed; see
 `test/fragment.test.tsx` for the regression coverage (both the standalone
 case and the fileable/hostable-Fragments-composed-together case above).
 
-## Ecosystem integration
-
-Neither of these gets hostable-specific integration code -- both plug in
-through `Upstream`'s existing `app=`/`handler=` mechanism, though not
-identically: `dialback`'s export already satisfies `FetchLike` directly;
-`browsermesh`'s two exports don't, so they go through two small, generic
-adapters instead (not browsermesh-specific themselves -- see below).
-
-- **[`@johnhenry/dialback`](https://github.com/johnhenry/dialback)**
-  (reverse-proxy-over-websockets: an agent dials out, the server dials
-  back through that connection to reach it) -- a `Server` instance is
-  already Fetch-shaped (`server.fetch(request)`), so forwarding gateway
-  traffic to an agent behind NAT/a firewall is just `<Upstream
-  app={dialbackServer} />`, no adapter needed. See
-  `examples/03-dialback-tunnel`.
-
-  **Known constraint**: `dialback`'s `Server#fetch()` picks a connection
-  via its own load-balancing strategy across *all* connected agents --
-  there's no way to target one specific agent by ID. Use one dedicated
-  `Server` instance per `Upstream` that needs a specific agent.
-
-- **[`@johnhenry/browsermesh`](https://github.com/johnhenry/browsermesh)**
-  (peer-to-peer mesh networking for browser Pods) has its own HTTP-shaped
-  bridges independent of `dialback`, but **neither satisfies `FetchLike`
-  as-is** (confirmed by reading their source, not assumed):
-  `createBrowserMeshFetch()` is a bare `fetch(url, init)`-shaped
-  *function*, not an object with `.fetch`; `MeshFetchRouter#route()`
-  returns `Response | null` (the Service-Worker-interceptor convention),
-  not always a `Response`. `fromFetchFn()`/`fromNullableRouter()` (below)
-  adapt each into `FetchLike`. See `examples/06-browsermesh` for a real,
-  running mesh round-trip both ways.
-
-### `fromFetchFn` / `fromNullableRouter`
-
-Two small, generic adapters -- not specific to browsermesh, just the two
-shapes it happens to need:
-
-```ts
-import { fromFetchFn, fromNullableRouter } from "@johnhenry/hostable";
-// Subpath imports (added in @johnhenry/browsermesh-apps@0.5.0) -- not the
-// top-level `.` entrypoint, which pulls in the package's entire 70+-module
-// application layer, including an eager @johnhenry/browsermesh-transport
-// import this integration doesn't need.
-import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
-import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
-
-// Adapts any fetch(url, init)-shaped function into app=.
-const meshFetch = createBrowserMeshFetch(meshRpcApi);
-<Upstream path="/*" app={fromFetchFn((_url, init) => meshFetch(`mesh://${podId}/greet`, init))} />
-
-// Adapts a (req) => Promise<Response|null> router into app=, with a
-// configurable fallback for null (default: a plain 404).
-const router = new MeshFetchRouter({ onRpc });
-<Host pattern="*.mesh.local">
-  <Upstream path="/*" app={fromNullableRouter(router.route.bind(router))} />
-</Host>
-```
-
-`fromFetchFn` reads a non-GET/HEAD request's body as text before calling
-`fn` (not a raw stream) -- matching how both `createBrowserMeshFetch()`
-and `MeshFetchRouter#route()` already extract a body from `init.body`/a
-real `Request` (read as text, then try `JSON.parse`), since neither
-accepts a stream.
-
 ## Adapters
 
 Thin re-exports of servable's own -- hostable's compiled output IS a
@@ -456,7 +394,8 @@ new primitive is warranted instead.
 
 ## Examples
 
-See [`examples/`](./examples):
+See [`examples/`](./examples) (and its own
+[`examples/README.md`](./examples/README.md) index):
 
 - `01-multi-domain` -- two `Host`s, each forwarding to a different `url=`
   backend.
@@ -480,6 +419,90 @@ See [`examples/`](./examples):
   `MeshFetchRouter` via `fromNullableRouter()` paired with `<Host
   pattern="*.mesh.local">`. Two real Ed25519-identified peers, a real
   `mesh-rpc` round trip, verified over real HTTP.
+
+## Family
+
+hostable is the third package in the `fileable -> servable -> hostable`
+lineage, and also the gateway other family packages plug backend traffic
+into.
+
+- **[`@johnhenry/servable`](https://github.com/johnhenry/servable)** --
+  a real, direct dependency: `Group`/`Host`/`Route`/`Use`/`ErrorBoundary`/
+  `NotFound`/`Redirect`/`Response` are all re-exported from servable
+  unchanged, and this package's own `compile()` delegates to servable's
+  `compile()` for everything below `<Host>`. `Host` itself -- the
+  domain-axis scope this package is named after -- lives in servable's own
+  Layout stage, not here (see servable's README, "Adding a new primitive",
+  for the bug that move fixed).
+- **[`@johnhenry/fileable`](https://github.com/johnhenry/fileable)** --
+  no direct dependency; fileable content reaches a hostable gateway
+  transitively, through servable's own mount support (a `<Dir>`/`<File>`
+  tree nested inside `<Group>`, itself nested inside `<Host>`/`<Gateway>`
+  -- see "Literal cross-package JSX" above, and `examples/05-nested-jsx`
+  for all three layers in one expression).
+
+Neither of the two integrations below gets hostable-specific code -- both
+plug in through `Upstream`'s existing `app=`/`handler=` mechanism, though
+not identically: `dialback`'s export already satisfies `FetchLike`
+directly; `browsermesh`'s two exports don't, so they go through two small,
+generic adapters instead (not browsermesh-specific themselves -- see
+below).
+
+- **[`@johnhenry/dialback`](https://github.com/johnhenry/dialback)**
+  (reverse-proxy-over-websockets: an agent dials out, the server dials
+  back through that connection to reach it) -- a `Server` instance is
+  already Fetch-shaped (`server.fetch(request)`), so forwarding gateway
+  traffic to an agent behind NAT/a firewall is just `<Upstream
+  app={dialbackServer} />`, no adapter needed. See
+  `examples/03-dialback-tunnel`.
+
+  **Known constraint**: `dialback`'s `Server#fetch()` picks a connection
+  via its own load-balancing strategy across *all* connected agents --
+  there's no way to target one specific agent by ID. Use one dedicated
+  `Server` instance per `Upstream` that needs a specific agent.
+
+- **[`@johnhenry/browsermesh`](https://github.com/johnhenry/browsermesh)**
+  (peer-to-peer mesh networking for browser Pods) has its own HTTP-shaped
+  bridges independent of `dialback`, but **neither satisfies `FetchLike`
+  as-is** (confirmed by reading their source, not assumed):
+  `createBrowserMeshFetch()` is a bare `fetch(url, init)`-shaped
+  *function*, not an object with `.fetch`; `MeshFetchRouter#route()`
+  returns `Response | null` (the Service-Worker-interceptor convention),
+  not always a `Response`. `fromFetchFn()`/`fromNullableRouter()` (below)
+  adapt each into `FetchLike`. See `examples/06-browsermesh` for a real,
+  running mesh round-trip both ways.
+
+### `fromFetchFn` / `fromNullableRouter`
+
+Two small, generic adapters -- not specific to browsermesh, just the two
+shapes it happens to need:
+
+```ts
+import { fromFetchFn, fromNullableRouter } from "@johnhenry/hostable";
+// Subpath imports (added in @johnhenry/browsermesh-apps@0.5.0) -- not the
+// top-level `.` entrypoint, which pulls in the package's entire 70+-module
+// application layer, including an eager @johnhenry/browsermesh-transport
+// import this integration doesn't need.
+import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
+import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
+
+// Adapts any fetch(url, init)-shaped function into app=.
+const meshFetch = createBrowserMeshFetch(meshRpcApi);
+<Upstream path="/*" app={fromFetchFn((_url, init) => meshFetch(`mesh://${podId}/greet`, init))} />
+
+// Adapts a (req) => Promise<Response|null> router into app=, with a
+// configurable fallback for null (default: a plain 404).
+const router = new MeshFetchRouter({ onRpc });
+<Host pattern="*.mesh.local">
+  <Upstream path="/*" app={fromNullableRouter(router.route.bind(router))} />
+</Host>
+```
+
+`fromFetchFn` reads a non-GET/HEAD request's body as text before calling
+`fn` (not a raw stream) -- matching how both `createBrowserMeshFetch()`
+and `MeshFetchRouter#route()` already extract a body from `init.body`/a
+real `Request` (read as text, then try `JSON.parse`), since neither
+accepts a stream.
 
 ## License
 
