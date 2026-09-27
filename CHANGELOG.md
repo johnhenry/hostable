@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
+## [0.0.1] - 2026-09-27
+
+### Fixed
+
+- **`compile.ts` imported `node:path/posix`, blocking browser bundling**
+  ([#5](https://github.com/johnhenry/hostable/issues/5)). Used once, in the
+  `<Group>` case, to join `ctx.pathPrefix` with a group's own `prefix` prop
+  for `TransformCtx.pathPrefix` tracking (a runtime concern for
+  `Upstream`'s path-prefix stripping in `forward.ts`, not route matching) --
+  the only Node-only import anywhere in `src/`/`adapters/`, but enough to
+  break a browser bundle on its own. Added a small, dependency-free
+  `src/posix.ts` (copied from `@johnhenry/servable`'s own, added there for
+  the identical reason in #7 -- not imported directly, since it isn't part
+  of servable's public exports and duplicating ~100 lines of stable,
+  already-tested logic was simpler than adding a new subpath export to a
+  sibling package for one function) and swapped `compile.ts` to use it.
+  Verified with a real bundler (esbuild, `platform: "browser"`) against the
+  packed tarball, matching how #7 verified servable's own fix; a negative
+  control confirmed the check fails with `Could not resolve
+  "node:path/posix"` against the pre-fix code.
+- Bumped the `@johnhenry/servable` dependency range to `^0.0.2` (the first
+  version with servable's own browser-safe variants) and
+  `@johnhenry/fileable` to `^0.0.4` (needed to satisfy servable 0.0.2's own
+  `>=0.0.3` peer range -- `^0.0.2` only resolves to exactly `0.0.2` for a
+  pre-1.0 `0.0.x` version, an easy-to-miss npm semver quirk).
+
 ## [0.0.0] - 2026-09-22
 
 ### Added

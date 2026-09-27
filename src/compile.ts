@@ -35,7 +35,7 @@
  * the Host hostname automatically, exactly like it already does for any
  * hand-written `<Route>`, hostable or not.
  */
-import { join as posixJoin } from "node:path/posix";
+import { join as posixJoin } from "./posix.js";
 import {
   ErrorBoundary as ServableErrorBoundary,
   Group as ServableGroup,
