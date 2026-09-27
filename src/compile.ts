@@ -154,9 +154,28 @@ function transformUpstream(node: Descriptor, ctx: TransformCtx, path: string): D
   return ALL_METHODS.map((m) => ServableRoute({ path: upstreamPath, method: m, handler }));
 }
 
-export async function compile(tree: unknown, options: CompileOptions = {}): Promise<CompileResult> {
+export interface LowerOptions {
+  /** See `CompileOptions.ipfsGateway` -- threaded the same way `compile()` threads it. */
+  ipfsGateway?: string;
+}
+
+/**
+ * Runs hostable's own pre-transform (Gateway/Upstream/raw-Fetch -> real
+ * servable Router/Route/Host/Group/...) without handing the result to
+ * servable's `compile()`. Exposed so tools can inspect the *structure*
+ * hostable produces -- which routes exist, how Hosts/Groups nest, what a
+ * given `<Upstream>` lowers to -- without reimplementing this file's own
+ * transform rules (issue #7's second ask). `compile()` itself is just
+ * `lower()` followed by `servableCompile()`; this is the same tree it
+ * would compile from, not a separate code path.
+ */
+export function lower(tree: unknown, options: LowerOptions = {}): DescriptorChild | DescriptorChild[] {
   const roots = Array.isArray(tree) ? tree : [tree];
   const rootCtx: TransformCtx = { pathPrefix: "", ipfsGateway: options.ipfsGateway };
   const transformed = roots.map((root) => transformChild(root as DescriptorChild, rootCtx, "root"));
-  return servableCompile(transformed.length === 1 ? transformed[0] : transformed, options);
+  return transformed.length === 1 ? transformed[0] : transformed;
+}
+
+export async function compile(tree: unknown, options: CompileOptions = {}): Promise<CompileResult> {
+  return servableCompile(lower(tree, { ipfsGateway: options.ipfsGateway }), options);
 }
