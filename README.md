@@ -313,6 +313,35 @@ moment it was used for anything beyond being re-exported. Fixed; see
 `test/fragment.test.tsx` for the regression coverage (both the standalone
 case and the fileable/hostable-Fragments-composed-together case above).
 
+## Inspecting the compiled tree
+
+`compile(tree, options)` is `lower(tree, options)` followed by
+`@johnhenry/servable`'s own `compile()` -- `lower()` runs just the first
+half: hostable's `Gateway`/`Upstream`/raw-Fetch pre-transform, without
+handing the result off for dispatching. It returns the same real servable
+descriptor tree (`Router`/`Route`/`Host`/`Group`/...) `compile()` would
+compile from, so a tool can inspect what a gateway actually resolves to --
+which routes exist, how `Host`/`Group` nest, how many `Route`s a
+method-less `<Upstream>` expanded into -- without reimplementing this
+file's own transform rules:
+
+```ts
+import { Gateway, Host, Upstream, lower } from "@johnhenry/hostable";
+import { isDescriptor } from "@johnhenry/hostable";
+
+const tree = Gateway({
+  children: Host({ name: "a.example.com", children: Upstream({ path: "/*", url: "https://backend/" }) }),
+});
+
+const lowered = lower(tree);
+// lowered is a real servable Descriptor tree: {tag, props, children}.
+```
+
+`lower()` takes the same `ipfsGateway` option `compile()` does (via
+`LowerOptions`, a strict subset of `CompileOptions`) since `Upstream`'s
+`url="ipfs://..."` handler is built during this pre-transform, before
+servable's own `compile()` -- and its own use of `ipfsGateway` -- ever runs.
+
 ## Adapters
 
 Thin re-exports of servable's own -- hostable's compiled output IS a

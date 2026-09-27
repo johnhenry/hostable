@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
+## [0.0.2] - 2026-09-26
+
+### Fixed
+
+- **`@johnhenry/servable` dependency pinned to exactly `0.0.2`, causing a
+  nested duplicate install** ([#7](https://github.com/johnhenry/hostable/issues/7)).
+  `^0.0.2` only resolves to exactly `0.0.2` for a pre-1.0 `0.0.x` version (the
+  same npm semver quirk #5's own fix noted for `fileable`) -- once the
+  registry had `@johnhenry/servable@0.0.3`, a consuming site that already
+  depended on `servable@0.0.3` elsewhere got a second, nested
+  `node_modules/@johnhenry/hostable/node_modules/@johnhenry/servable@0.0.2`
+  instead of deduping onto the one already installed. Widened to
+  `>=0.0.2 <0.1.0` (the issue's own suggested form) so future `0.0.x`
+  servable patches dedupe correctly without needing a release here just to
+  bump the pin. Applied the same widening to the `@johnhenry/fileable`,
+  `@johnhenry/dialback`, and `@johnhenry/browsermesh-discovery`
+  devDependencies, which had the identical latent `0.0.x`-caret trap even
+  though none had actively broken yet. Verified by installing
+  `@johnhenry/servable@0.0.3` directly and confirming `npm ls
+  @johnhenry/servable` shows one deduped entry, not a nested duplicate.
+
+### Added
+
+- **`lower(tree, options?)`**, exported alongside `compile()` -- runs just
+  hostable's own `Gateway`/`Upstream`/raw-Fetch pre-transform and returns
+  the resulting real servable descriptor tree, without handing it to
+  servable's own `compile()` ([#7](https://github.com/johnhenry/hostable/issues/7)'s
+  second ask). Lets a tool inspect what a gateway resolves to -- routes,
+  `Host`/`Group` nesting, how many `Route`s a method-less `<Upstream>`
+  expanded into -- without reimplementing this package's own transform
+  rules. `compile()` itself is now just `lower()` followed by
+  `servableCompile()`, not a separate code path. See "Inspecting the
+  compiled tree" in the README.
+
 ## [0.0.1] - 2026-09-27
 
 ### Fixed

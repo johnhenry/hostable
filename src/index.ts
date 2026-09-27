@@ -1,4 +1,5 @@
-export { compile } from "./compile.js";
+export { compile, lower } from "./compile.js";
+export type { LowerOptions } from "./compile.js";
 export { Gateway, Upstream } from "./components.js";
 
 // Re-exported directly from @johnhenry/servable, unchanged -- hostable's

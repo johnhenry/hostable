@@ -1,6 +1,6 @@
 {
   "name": "@johnhenry/hostable",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Declaratively describe an API gateway using JSX -- routes across multiple domains/backends by Host header, on top of @johnhenry/servable's single-app dispatcher.",
   "type": "module",
   "main": "./dist/src/index.js",
@@ -76,7 +76,7 @@
   ],
   "author": "John Henry",
   "dependencies": {
-    "@johnhenry/servable": "^0.0.2",
+    "@johnhenry/servable": ">=0.0.2 <0.1.0",
     "urlpattern-polyfill": "^10.0.0"
   },
   "peerDependencies": {
@@ -90,9 +90,9 @@
   "devDependencies": {
     "@johnhenry/browsermesh-apps": "^0.5.0",
     "@johnhenry/browsermesh-core": "^0.3.0",
-    "@johnhenry/browsermesh-discovery": "^0.0.5",
-    "@johnhenry/dialback": "^0.0.3",
-    "@johnhenry/fileable": "^0.0.4",
+    "@johnhenry/browsermesh-discovery": ">=0.0.5 <0.1.0",
+    "@johnhenry/dialback": ">=0.0.3 <0.1.0",
+    "@johnhenry/fileable": ">=0.0.4 <0.1.0",
     "@johnhenry/leserve": "^0.0.0",
     "@types/node": "^26.6.1",
     "@types/ws": "^8.5.0",
