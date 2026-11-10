@@ -7,10 +7,12 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-10
+
 ### Added
 
 - **[#11, #12] `hostable serve <module>` and `hostable routes <module>`: a CLI for running a gateway under a supervisor (Node only).** `serve` follows `servable serve`'s contract (servable#13): `--port`/`--port 0`, `--host`, `--json` NDJSON events with a `v` schema version, the same error and exit codes, graceful SIGTERM/SIGINT drain, `--watch` with a 500 while broken, and `--public-url`/`--trust-proxy`. hostable adds a `routes` event (every hostname, path and method, plus the `url=` backends) emitted before each `ready`, the `routes` command that prints it without listening, and `E_UPSTREAM` (502, or 504 on `timeout=`) for unreachable backends. The CLI runtime (`src/serve-cli.ts`) is a copy of servable's, so this doesn't need a servable release.
-- **[#11, #12] `describeRoutes(tree)` and a non-enumerable `describeRoutes()` on what `compile()` returns** (new `HostableCompileResult` type). They run servable's Layout on a copy of the lowered tree, so mounted and glob routes are listed too. Needs `@johnhenry/servable` >= 0.0.3 (already the locked version; the dependency range is unchanged).
+- **[#11, #12] `describeRoutes(tree)` and a non-enumerable `describeRoutes()` on what `compile()` returns** (new `HostableCompileResult` type). They run servable's Layout on a copy of the lowered tree, so mounted and glob routes are listed too. Needs `@johnhenry/servable` >= 0.0.3 (the lockfile resolves 0.1.0, see #14; the range floor is still 0.0.2).
 - **[#11, #12] Backend lifecycle contract, documented in README "Backends":** the supervisor starts and health-checks backends, and hostable reports them and returns 502/504 when they're down.
 
 ### Changed
