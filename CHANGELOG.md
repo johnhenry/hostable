@@ -15,6 +15,7 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ### Changed
 
+- **[#PRNUM] `@johnhenry/servable` dependency range widened to `>=0.0.2 <0.2.0`** (was `<0.1.0`), so installs can get servable 0.1.0. The lockfile now resolves 0.1.0; the test suite, all seven examples and the `hostable` CLI (`routes`, `serve`, `serve --json --watch` under `--permission`, SIGTERM drain) pass against it. The CLI is still hostable's own copy (#13).
 - **[#11, #12] `@johnhenry/leserve` is now a regular dependency** (it was a dev dependency). The CLI serves through servable's Node adapter, which needs it. It isn't loaded by the main entry.
 
 ## [0.0.2] - 2026-09-26
