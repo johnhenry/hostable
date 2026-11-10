@@ -14,6 +14,7 @@ comment states its exact run command, port, and a few `curl -H "Host:
 | [`04-full-stack/server.tsx`](./04-full-stack/server.tsx) | `fileable` (static assets, via servable's `Group from=`) + `servable` (a separately-compiled API app, mounted as a raw child) + `hostable` (multi-domain routing + reverse proxy), one running app. |
 | [`05-nested-jsx/server.tsx`](./05-nested-jsx/server.tsx) | The flagship: all three layers of the lineage written as literal, nested JSX in one expression -- `<Dir>`/`<File>` (fileable) inside `<Group>` (servable) inside `<Host>`/`<Gateway>` (hostable), one file, one pragma. |
 | [`06-browsermesh/server.tsx`](./06-browsermesh/server.tsx) | Forwards gateway traffic into a real browsermesh peer two ways: `createBrowserMeshFetch()` via `fromFetchFn()`, and `MeshFetchRouter` via `fromNullableRouter()` paired with `<Host pattern="*.mesh.local">`. Two real Ed25519-identified peers, a real `mesh-rpc` round trip. |
+| [`07-serve-cli/gateway.tsx`](./07-serve-cli/gateway.tsx) | A module for the `hostable` CLI: it only default-exports the compiled gateway. `hostable routes` lists its hostnames and backends; `hostable serve --json` reports them as a `routes` event. |
 
 ## Running
 

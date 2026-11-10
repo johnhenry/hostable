@@ -30,7 +30,9 @@ adapter in `adapters/`.
    promote one to a real dependency).
 5. Run an example after building: `npm run build && node dist/examples/01-multi-domain/server.js`,
    then hit it with `curl -H "Host: ..."` per that example's own header
-   comment.
+   comment. For CLI changes, run `examples/07-serve-cli` through
+   `dist/src/cli.js` (`routes`, `serve`, and the `--permission` command in
+   its header).
 6. Commit, push, close the issue with a comment naming the commit SHA.
 
 CI (`.github/workflows/ci.yml`) runs build then test in that order; match it
@@ -45,6 +47,13 @@ locally.
   real servable Layout-stage primitive now — don't reintroduce a
   hostable-local `Host` implementation to "fix" something; the fix already
   lives one layer down. See servable's README, "Adding a new primitive".
+- **The CLI (`src/serve-cli.ts`) is a copy of `@johnhenry/servable`'s
+  `src/serve-cli.ts`, kept in step by hand.** It's the same `--json`
+  contract (envelope, `v` schema version, events, error and exit codes),
+  which Sitefile Desktop consumes. Change both repos together; additions
+  only, or bump `SCHEMA_VERSION` in both. hostable-only parts (the `routes`
+  event and command, `E_UPSTREAM`) live in `src/hostable-cli.ts`. Nothing
+  reachable from `src/index.ts` may import the CLI files or leserve.
 - **`Upstream`'s `url=`/`app=`/`handler=` are mutually exclusive** — setting
   more than one throws. A new backend shape for `app=` (matching
   `{fetch(request): Promise<Response>}`) never needs `Upstream`-specific

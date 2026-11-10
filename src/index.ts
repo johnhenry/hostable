@@ -1,5 +1,7 @@
 export { compile, lower } from "./compile.js";
-export type { LowerOptions } from "./compile.js";
+export type { LowerOptions, HostableCompileResult } from "./compile.js";
+export { describeRoutes } from "./routes.js";
+export type { RoutesReport, HostEntry, RouteEntry, BackendEntry } from "./routes.js";
 export { Gateway, Upstream } from "./components.js";
 
 // Re-exported directly from @johnhenry/servable, unchanged -- hostable's
