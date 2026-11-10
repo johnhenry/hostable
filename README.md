@@ -24,6 +24,10 @@ backends, addressed by domain as well as path.
 - [Primitives](#primitives)
 - [Literal cross-package JSX](#literal-cross-package-jsx)
 - [Adapters](#adapters)
+- [Command line](#command-line)
+  - [The `routes` event](#the-routes-event)
+  - [Backends](#backends)
+  - [Node's permission model](#nodes-permission-model)
 - [Non-goals](#non-goals)
 - [Adding a new primitive](#adding-a-new-primitive)
 - [Examples](#examples)
@@ -352,11 +356,122 @@ import { serve } from "@johnhenry/hostable/adapters/node";
 const handle = serve(compiled, { port: 3000 });
 ```
 
+## Command line
+
+`hostable serve <module>` runs a gateway, and `hostable routes <module>`
+lists what it answers. Together they're the interface a supervisor (such as
+Sitefile Desktop's `*.localhost` name router) drives hostable through.
+Node only.
+
+The module default-exports the compiled gateway and doesn't call `serve()`
+itself:
+
+```tsx
+/** @jsxImportSource @johnhenry/hostable */
+import { Gateway, Host, Route, compile } from "@johnhenry/hostable";
+export default await compile(
+  <Gateway>
+    <Host name="www.localhost"><Route path="/">Hello</Route></Host>
+  </Gateway>,
+);
+```
+
+```sh
+npx hostable routes dist/gateway.js --json
+npx hostable serve dist/gateway.js --port 0 --json --watch
+```
+
+`hostable serve` follows the same contract as
+[`servable serve`](https://github.com/johnhenry/servable#command-line):
+the same options (`--port`/`--port 0`, `--host`, `--json`, `--watch`,
+`--watch-path`, `--public-url`, `--trust-proxy`, `--drain-timeout`), the
+same NDJSON envelope (`{"v":1,"event":…,"time":…}`) and events (`ready`,
+`request`, `reloading`, `warning`, `error`, `stopping`, `stopped`), the
+same SIGTERM/SIGINT drain, and the same exit codes. Point it at JavaScript,
+not `.tsx`. See [`examples/07-serve-cli`](./examples/07-serve-cli/gateway.tsx).
+
+| Exit | Error codes | Meaning |
+| --- | --- | --- |
+| 0 | | Stopped by SIGTERM/SIGINT (or `routes` succeeded). |
+| 1 | `E_INTERNAL` | Unexpected error, or an uncaught exception after start. |
+| 2 | `E_USAGE` | Bad command line. |
+| 3 | `E_MODULE_NOT_FOUND`, `E_MODULE_LOAD`, `E_NOT_AN_APP` | The module is missing, threw while loading, or its default export isn't a compiled app. Under `--watch` these aren't fatal: the server starts anyway and serves a 500. |
+| 4 | `E_LISTEN` | Couldn't listen (`errno`, e.g. `EADDRINUSE`). |
+| 5 | `E_ACCESS_DENIED` | Node's permission model refused something. |
+| | `E_REQUEST`, `E_UPSTREAM` | Never fatal: a handler threw (500), or a `url=` backend was unreachable (502) or hit its `timeout=` (504). |
+
+### The `routes` event
+
+hostable adds one event. `serve --json` emits it after every successful
+load, before `ready`. `routes --json` prints it as its only line and exits
+without listening.
+
+```json
+{"v":1,"event":"routes","time":"…","complete":true,
+ "hosts":[
+   {"hostname":"www.localhost","pattern":false,"routes":[{"path":"/","methods":["GET"]},{"path":"/home","methods":["*"],"redirect":"/"}]},
+   {"hostname":"api.localhost","pattern":false,"routes":[{"path":"/v1/*","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]}]}],
+ "backends":[{"hostname":"api.localhost","path":"/v1/*","url":"http://127.0.0.1:3021/","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]}]}
+```
+
+- `hosts[].hostname` is a `<Host name>`, a `<Host pattern>` (`pattern:
+  true`, URLPattern hostname syntax such as `*.example.com`), or `*` for
+  routes outside any `<Host>`. Register the literal names with your name
+  router. A pattern or `*` needs a wildcard rule or a fixed name of your
+  choosing.
+- `routes[].path` uses URLPattern pathname syntax. The list comes from
+  servable's own Layout stage, so mounted fileable trees and `Group from=`
+  routes are included.
+- `complete: false` (with an `E_ROUTES_UNKNOWN` warning) means the default
+  export wasn't made by hostable's `compile()`, so it can't describe itself.
+
+The same report is available in code: `await compiled.describeRoutes()` (a
+non-enumerable method on what `compile()` returns), or
+`describeRoutes(tree)`. Both need `@johnhenry/servable` 0.0.3 or later.
+
+### Backends
+
+hostable doesn't start, stop or health-check the processes behind
+`<Upstream url=…>`. It lists them as `backends` in the `routes` event. The
+supervisor owns them:
+
+1. Read `backends` from `routes`, then start each local backend and wait
+   until it's healthy (your own check: hostable has no health endpoint
+   convention).
+2. Start or keep `hostable serve` running. Order doesn't matter: a request
+   to a backend that isn't up gets a **502** and a non-fatal `error` event
+   with `code: "E_UPSTREAM"`, `errno` (e.g. `ECONNREFUSED`), `address` and
+   `port`, so you can see which backend to restart. A `timeout=` that runs
+   out gets a **504** with the same code.
+3. Restart backends independently. The gateway holds no connection state
+   for them; the next request just works.
+
+`app=` and `handler=` upstreams run in the gateway's own process and aren't
+listed as backends.
+
+### Node's permission model
+
+Like `servable serve`: `--allow-fs-read` covering the project (the module,
+its imports, and `node_modules`), plus `--allow-net` to listen. The same
+`--allow-net` also covers forwarding to `url=` backends; Node 26 has no
+per-host network permission. `hostable routes` needs only the read access.
+Neither command needs `--allow-fs-write` or `--allow-child-process`.
+
+```sh
+node --permission --allow-fs-read="$PWD" --allow-net \
+  node_modules/@johnhenry/hostable/dist/src/cli.js serve dist/gateway.js --port 0 --json
+```
+
 ## Non-goals
 
 - Not a service mesh, not pod discovery, not sidecar injection --
   `browsermesh`'s domain, not duplicated here.
 - No built-in TLS/cert management -- delegate to the adapter/runtime.
+- No backend process management: `hostable serve` doesn't start, stop or
+  health-check `url=` backends. It reports them and returns 502/504 when
+  they're down (see "Backends").
+- No hot module replacement: `--watch` re-imports the gateway on change,
+  like `servable serve --watch`.
 - No built-in load balancing/health checks/circuit breaking in v1 --
   `Upstream` stays single-target; `handler=` covers custom multi-target
   logic without a new primitive.

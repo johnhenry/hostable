@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
+  "bin": {
+    "hostable": "./dist/src/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
@@ -76,6 +79,7 @@
   ],
   "author": "John Henry",
   "dependencies": {
+    "@johnhenry/leserve": "^0.0.0",
     "@johnhenry/servable": ">=0.0.2 <0.1.0",
     "urlpattern-polyfill": "^10.0.0"
   },
@@ -93,7 +97,6 @@
     "@johnhenry/browsermesh-discovery": ">=0.0.5 <0.1.0",
     "@johnhenry/dialback": ">=0.0.3 <0.1.0",
     "@johnhenry/fileable": ">=0.0.4 <0.1.0",
-    "@johnhenry/leserve": "^0.0.0",
     "@types/node": "^26.6.1",
     "@types/ws": "^8.5.0",
     "esbuild": "^0.28.2",

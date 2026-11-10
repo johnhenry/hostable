@@ -49,6 +49,7 @@ import type { CompileOptions, CompileResult } from "@johnhenry/servable";
 import { FRAGMENT, isDescriptor, isFetchLike } from "./types.js";
 import type { Descriptor, DescriptorChild } from "./types.js";
 import { createAppUpstream, resolveUpstreamHandler } from "./forward.js";
+import { describeRoutes, type RoutesReport } from "./routes.js";
 
 interface TransformCtx {
   /** Accumulated <Group prefix> chain -- used only for Upstream's own runtime prefix-stripping (forward.ts), never for compiling the match pattern (servable's own Layout does that now). */
@@ -176,6 +177,17 @@ export function lower(tree: unknown, options: LowerOptions = {}): DescriptorChil
   return transformed.length === 1 ? transformed[0] : transformed;
 }
 
-export async function compile(tree: unknown, options: CompileOptions = {}): Promise<CompileResult> {
-  return servableCompile(lower(tree, { ipfsGateway: options.ipfsGateway }), options);
+/** servable's `CompileResult` plus a non-enumerable `describeRoutes()` (what `hostable routes` and `hostable serve --json` report). */
+export interface HostableCompileResult extends CompileResult {
+  /** Hostnames, paths and `url=` backends this gateway answers. Runs servable's Build/Resolve/Layout again on a copy, so call it once, not per request. */
+  describeRoutes(): Promise<RoutesReport>;
+}
+
+export async function compile(tree: unknown, options: CompileOptions = {}): Promise<HostableCompileResult> {
+  const result = await servableCompile(lower(tree, { ipfsGateway: options.ipfsGateway }), options);
+  Object.defineProperty(result, "describeRoutes", {
+    value: () => describeRoutes(tree, options),
+    enumerable: false,
+  });
+  return result as HostableCompileResult;
 }
