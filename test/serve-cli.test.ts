@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { compile, describeRoutes, Gateway, Group, Host, Redirect, Route, Upstream } from "../src/index.js";
-import { SCHEMA_VERSION } from "../src/serve-cli.js";
+import { SCHEMA_VERSION } from "@johnhenry/servable/cli";
 
 const distRoot = fileURLToPath(new URL("../", import.meta.url));
 const cli = join(distRoot, "src", "cli.js");
@@ -238,6 +238,41 @@ test("an unreachable url= backend is a 502 with a non-fatal E_UPSTREAM event", a
   }
 });
 
+test("#13 human serve output: the routes block, then listening; E_UPSTREAM and the 504 on timeout=", async () => {
+  const dir = fixtureDir();
+  const mod = join(dir, "gw.mjs");
+  const port = await freePort();
+  const { createServer: httpServer } = await import("node:http");
+  const slow = httpServer(() => {});
+  await new Promise<void>((r) => slow.listen(0, "127.0.0.1", r));
+  const slowPort = (slow.address() as AddressInfo).port;
+  writeFileSync(
+    mod,
+    gatewaySource(
+      `Host({ name: "a.localhost", children: [Route({ path: "/", method: "GET", children: ["a"] })] }), Upstream({ path: "/down/*", url: "http://127.0.0.1:${port}/" }), Upstream({ path: "/slow/*", url: "http://127.0.0.1:${slowPort}/", timeout: 200 })`,
+    ),
+  );
+  const r = run(["serve", mod, "--port", "0"]);
+  try {
+    for (let i = 0; i < 400 && !r.stdoutLines.some((l) => l.startsWith("hostable: listening on ")); i++) await new Promise((res) => setTimeout(res, 25));
+    const listening = r.stdoutLines.findIndex((l) => l.startsWith("hostable: listening on "));
+    assert.ok(listening > 0, r.stdoutLines.join("\n"));
+    assert.deepEqual(r.stdoutLines.slice(0, 3), ["a.localhost", "  GET      /", "(any host)"]);
+    assert.ok(r.stdoutLines.slice(0, listening).includes("backends:"));
+    const base = r.stdoutLines[listening].slice("hostable: listening on ".length);
+    assert.equal((await fetch(`${base}down/x`)).status, 502);
+    assert.equal((await fetch(`${base}slow/x`)).status, 504);
+    for (let i = 0; i < 200 && (r.stderr().match(/E_UPSTREAM/g) ?? []).length < 2; i++) await new Promise((res) => setTimeout(res, 25));
+    assert.match(r.stderr(), /^hostable: error E_UPSTREAM: upstream unreachable: ECONNREFUSED$/m);
+    assert.match(r.stderr(), /^hostable: error E_UPSTREAM: upstream timed out$/m);
+  } finally {
+    r.child.kill("SIGKILL");
+    slow.closeAllConnections();
+    slow.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("--trust-proxy: X-Forwarded-Host picks the <Host>", async () => {
   const dir = fixtureDir();
   const mod = join(dir, "gw.mjs");
@@ -258,6 +293,10 @@ test("usage, module and listen failures use servable's exit codes", async () => 
   assert.equal(await usage.exit, 2);
   assert.equal(usage.events[0].code, "E_USAGE");
 
+  const help = run(["serve", "--help"]);
+  assert.equal(await help.exit, 0);
+  assert.match(help.stdoutLines.join("\n"), /^Usage: hostable serve <module> \[options\]\n\nServe the compiled app a module default-exports \(export default await compile\(<Gateway>\.\.\.<\/Gateway>\)\)\.\n/);
+
   const dir = fixtureDir();
   const notApp = join(dir, "not.mjs");
   writeFileSync(notApp, `export default 42;\n`);
@@ -266,7 +305,9 @@ test("usage, module and listen failures use servable's exit codes", async () => 
   try {
     const n = run(["serve", notApp, "--json", "--port", "0"]);
     assert.equal(await n.exit, 3);
-    assert.equal(n.events.find((e) => e.event === "error")!.code, "E_NOT_AN_APP");
+    const notAppError = n.events.find((e) => e.event === "error")!;
+    assert.equal(notAppError.code, "E_NOT_AN_APP");
+    assert.match(String(notAppError.message), /expected a compiled app -- export default await compile\(<Gateway>\.\.\.<\/Gateway>\)$/);
 
     const mod = join(dir, "gw.mjs");
     writeFileSync(mod, gatewaySource(`Route({ path: "/", method: "GET", children: ["x"] })`));
@@ -298,9 +339,18 @@ test("--watch: a reload re-emits routes, a broken gateway serves a 500, the port
     assert.equal((routes[1].hosts as { hostname: string }[])[0].hostname, "two.localhost");
     assert.equal((await get(first.url as string, "/", "two.localhost")).body, "two.localhost");
 
-    writeFileSync(hosts, `export const name = ;\n`);
+    // Broken (it throws its own URL, so the reload's query parameter shows).
+    writeFileSync(hosts, `export const name = "three.localhost";\nthrow new Error("broken at " + import.meta.url);\n`);
     await r.waitFor((e) => e.event === "ready" && e.ok === false);
-    assert.equal((await get(first.url as string, "/", "two.localhost")).status, 500);
+    const broken = await get(first.url as string, "/", "two.localhost");
+    assert.equal(broken.status, 500);
+    // hostable's wording (#13: these strings are hooks on servable's runtime now).
+    assert.match(broken.body, /^hostable: the gateway failed to load\n\nE_MODULE_LOAD: /);
+    // Reloads re-import the project's files under hostable's query parameter, not servable's.
+    const loadError = r.events.filter((e) => e.event === "error").at(-1)!;
+    assert.equal(loadError.code, "E_MODULE_LOAD");
+    assert.match(String(loadError.message), /broken at file:\S*hosts\.mjs\?hostable-reload=\d+$/);
+    assert.doesNotMatch(String(loadError.message), /servable-reload/);
   } finally {
     r.child.kill("SIGKILL");
     rmSync(dir, { recursive: true, force: true });

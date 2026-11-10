@@ -381,7 +381,9 @@ npx hostable routes dist/gateway.js --json
 npx hostable serve dist/gateway.js --port 0 --json --watch
 ```
 
-`hostable serve` follows the same contract as
+`hostable serve` is `servable serve`'s own runtime
+([`@johnhenry/servable/cli`](https://github.com/johnhenry/servable#embedding-the-cli-johnhenryservablecli))
+with hostable's hooks, so it follows the same contract as
 [`servable serve`](https://github.com/johnhenry/servable#command-line):
 the same options (`--port`/`--port 0`, `--host`, `--json`, `--watch`,
 `--watch-path`, `--public-url`, `--trust-proxy`, `--drain-timeout`), the

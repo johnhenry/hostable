@@ -47,13 +47,18 @@ locally.
   real servable Layout-stage primitive now — don't reintroduce a
   hostable-local `Host` implementation to "fix" something; the fix already
   lives one layer down. See servable's README, "Adding a new primitive".
-- **The CLI (`src/serve-cli.ts`) is a copy of `@johnhenry/servable`'s
-  `src/serve-cli.ts`, kept in step by hand.** It's the same `--json`
+- **The CLI runs `@johnhenry/servable/cli`, servable's own serve runtime
+  (#13, servable#17); there is no copy here any more.** Same `--json`
   contract (envelope, `v` schema version, events, error and exit codes),
-  which Sitefile Desktop consumes. Change both repos together; additions
-  only, or bump `SCHEMA_VERSION` in both. hostable-only parts (the `routes`
-  event and command, `E_UPSTREAM`) live in `src/hostable-cli.ts`. Nothing
-  reachable from `src/index.ts` may import the CLI files or leserve.
+  which Sitefile Desktop consumes. hostable-only parts live in
+  `src/hostable-cli.ts` as `RunHooks`: the `routes` event (`afterLoad`) and
+  its human rendering (`renderers`), the `routes` command, `E_UPSTREAM`
+  (`requestError`, `errorCodes`), and the strings (`hostable` label, usage,
+  `hostable-reload`, the 500 page's "the gateway failed to load", the
+  `<Gateway>` hint). A change to the shared runtime goes into servable first,
+  then a servable floor raise here; additions only, or bump
+  `SCHEMA_VERSION` in servable. Nothing reachable from `src/index.ts` may
+  import the CLI files or leserve.
 - **`Upstream`'s `url=`/`app=`/`handler=` are mutually exclusive** — setting
   more than one throws. A new backend shape for `app=` (matching
   `{fetch(request): Promise<Response>}`) never needs `Upstream`-specific

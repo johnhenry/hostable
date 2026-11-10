@@ -4,8 +4,8 @@
  * line" for the contract.
  */
 import { readFileSync } from "node:fs";
-import { CliError, EXIT, createReporter, errorFields } from "./serve-cli.js";
-import { hostableServe, routesCommand } from "./hostable-cli.js";
+import { CliError, EXIT, errorFields } from "@johnhenry/servable/cli";
+import { hostableReporter, hostableServe, routesCommand } from "./hostable-cli.js";
 
 const USAGE = `Usage: hostable <command> [options]
 
@@ -32,7 +32,7 @@ async function main(argv: string[]): Promise<number> {
   const json = argv.includes("--json");
   if (!json) process.stderr.write(USAGE);
   const fields = errorFields(new CliError("E_USAGE", `unknown command: ${command}`), true);
-  await new Promise<void>((done) => createReporter(json, "hostable").final("error", fields, done));
+  await new Promise<void>((done) => hostableReporter(json).final("error", fields, done));
   return EXIT.USAGE;
 }
 
