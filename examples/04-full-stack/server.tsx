@@ -16,6 +16,7 @@
  * Run with:
  *   npm run build && node dist/examples/04-full-stack/server.js
  * Then (-H sets the Host header directly, avoiding any real or fake DNS):
+ *   curl http://localhost:3013/   # an index of what this gateway answers
  *   curl http://localhost:3013/static/dist/index.html -H "Host: app.example.com"
  *   curl http://localhost:3013/api/hello -H "Host: app.example.com"
  *   curl http://localhost:3013/anything -H "Host: proxy.example.com"
@@ -27,6 +28,17 @@ import { Router, Group, Route, compile as compileServable } from "@johnhenry/ser
 
 const app = await compileServable(
   <Router>
+    <Route path="/" method="GET">
+      <h1>The mounted servable app</h1>
+      <ul>
+        <li>
+          <a href="/static/dist/index.html">/static/dist/index.html</a>
+        </li>
+        <li>
+          <a href="/api/hello">/api/hello</a>
+        </li>
+      </ul>
+    </Route>
     <Group prefix="/static">
       <Dir name="dist">
         <File name="index.html">{"<h1>Hello from the mounted servable app</h1>"}</File>
@@ -54,6 +66,26 @@ const gateway = Gateway({
   children: [
     Host({ name: "app.example.com", children: app }), // the compiled servable app, mounted as a raw child
     Host({ name: "proxy.example.com", children: Upstream({ path: "/*", url: `http://localhost:${legacyPort}/` }) }),
+    // Any host, last: a plain http://localhost:3013/ (no matching Host header) lands on this index instead of a 404.
+    Route({
+      path: "/",
+      method: "GET",
+      children: [
+        <h1>Full-stack gateway</h1>,
+        <p>Routes by Host header; try these with curl -H:</p>,
+        <ul>
+          <li>
+            <code>Host: app.example.com GET /static/dist/index.html</code>
+          </li>
+          <li>
+            <code>Host: app.example.com GET /api/hello</code>
+          </li>
+          <li>
+            <code>Host: proxy.example.com GET /* (proxied)</code>
+          </li>
+        </ul>,
+      ],
+    }),
   ],
 });
 

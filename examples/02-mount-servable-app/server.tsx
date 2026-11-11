@@ -11,6 +11,7 @@
  * Run with:
  *   npm run build && node dist/examples/02-mount-servable-app/server.js
  * Then:
+ *   curl http://localhost:3011/   # an index of what this gateway answers
  *   curl http://localhost:3011/via-prop/users
  *   curl http://localhost:3011/via-raw-child/users
  */
@@ -34,6 +35,15 @@ const app = (
       <Upstream path="/*" app={usersApi} />
     </Group>
     <Group prefix="/via-raw-child">{usersApi}</Group>
+    {/* An index at /, so opening the gateway's root lands somewhere. */}
+    <Route path="/" method="GET">
+      <h1>A servable app mounted two ways</h1>
+      <p>The same compiled app, mounted with app= and as a raw child:</p>
+      <ul>
+        <li><a href="/via-prop/users">/via-prop/users</a></li>
+        <li><a href="/via-raw-child/users">/via-raw-child/users</a></li>
+      </ul>
+    </Route>
   </Gateway>
 );
 

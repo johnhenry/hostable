@@ -14,6 +14,7 @@
  *   node --permission --allow-fs-read="$PWD" --allow-net dist/src/cli.js \
  *     serve dist/examples/07-serve-cli/gateway.js --port 0 --json --watch
  * Then:
+ *   curl http://127.0.0.1:3020/   # an index of what this gateway answers
  *   curl http://127.0.0.1:3020/ -H "Host: www.localhost"
  *   curl http://127.0.0.1:3020/v1/users -H "Host: api.localhost"
  */
@@ -31,5 +32,14 @@ export default await compile(
     <Host name="api.localhost">
       <Upstream path="/v1/*" url="http://127.0.0.1:3021/" />
     </Host>
+    {/* Any host, last: a plain http://127.0.0.1:3020/ (no matching Host header) lands on this index instead of a 404. */}
+    <Route path="/" method="GET">
+      <h1>hostable serve</h1>
+      <p>Routes by Host header (through a *.localhost name router, or curl -H):</p>
+      <ul>
+        <li><code>www.localhost GET / and /home</code></li>
+        <li><code>api.localhost GET /v1/* (proxied to 127.0.0.1:3021)</code></li>
+      </ul>
+    </Route>
   </Gateway>,
 );

@@ -17,6 +17,7 @@
  * Run with:
  *   npm run build && node dist/examples/01-multi-domain/server.js
  * Then (-H sets the Host header directly, avoiding any real or fake DNS):
+ *   curl http://localhost:3010/   # an index of what this gateway answers
  *   curl http://localhost:3010/site/assets/index.html -H "Host: a.example.com"
  *   curl http://localhost:3010/hello -H "Host: a.example.com"
  *   curl http://localhost:3010/hello -H "Host: b.example.com"
@@ -49,6 +50,16 @@ const app = (
     <Host name="b.example.com">
       <Upstream path="/*" url={`http://localhost:${portB}/`} />
     </Host>
+    {/* Any host, last: a plain http://localhost:3010/ (no matching Host header) lands on this index instead of a 404. */}
+    <Route path="/" method="GET">
+      <h1>Multi-domain gateway</h1>
+      <p>Routes by Host header; try these with curl -H:</p>
+      <ul>
+        <li><code>Host: a.example.com GET /site/assets/index.html</code></li>
+        <li><code>Host: a.example.com GET /hello</code></li>
+        <li><code>Host: b.example.com GET /* (proxied to backend B)</code></li>
+      </ul>
+    </Route>
   </Gateway>
 );
 

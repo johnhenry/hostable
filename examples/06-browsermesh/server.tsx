@@ -33,6 +33,7 @@
  *   npm run build && node dist/examples/06-browsermesh/server.js
  * Then (both routes forward to the same "bob" peer, one via a fixed
  * mesh:// address, the other via the podId embedded in the Host header):
+ *   curl http://localhost:3015/   # an index of what this gateway answers
  *   curl http://localhost:3015/anything -H "Host: direct.example.com"
  *   curl http://localhost:3015/anything -H "Host: <bob's podId printed at startup>.mesh.local"
  */
@@ -42,7 +43,7 @@ import { createMeshRpcService } from "@johnhenry/browsermesh-apps/mesh-rpc";
 import { createBrowserMeshFetch } from "@johnhenry/browsermesh-apps/mesh-fetch";
 import { MeshFetchRouter } from "@johnhenry/browsermesh-discovery";
 import { IdentityWallet, MeshIdentityManager } from "@johnhenry/browsermesh-core";
-import { Gateway, Host, Upstream, fromFetchFn, fromNullableRouter, compile } from "@johnhenry/hostable";
+import { Gateway, Host, Route, Upstream, fromFetchFn, fromNullableRouter, compile } from "@johnhenry/hostable";
 import { serve } from "@johnhenry/hostable/adapters/node";
 
 async function createPeer(label: string) {
@@ -98,6 +99,15 @@ const app = (
     <Host pattern="*.mesh.local">
       <Upstream path="/*" app={fromNullableRouter(router.route.bind(router))} />
     </Host>
+    {/* Any host, last: a plain http://localhost:3015/ (no matching Host header) lands on this index instead of a 404. */}
+    <Route path="/" method="GET">
+      <h1>browsermesh gateway</h1>
+      <p>Routes by Host header; try these with curl -H:</p>
+      <ul>
+        <li><code>Host: direct.example.com GET /* (to bob via createBrowserMeshFetch)</code></li>
+        <li><code>Host: &lt;podId&gt;.mesh.local GET /* (through MeshFetchRouter)</code></li>
+      </ul>
+    </Route>
   </Gateway>
 );
 
