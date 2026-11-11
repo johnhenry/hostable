@@ -238,6 +238,96 @@ test("an unreachable url= backend is a 502 with a non-fatal E_UPSTREAM event", a
     assert.equal(err.fatal, false);
     assert.equal(err.errno, "ECONNREFUSED");
     assert.equal((await r.waitFor((e) => e.event === "request")).status, 502);
+    // #22: the event names its backend (its `backends` entry) and the request.
+    const routes = r.events.find((e) => e.event === "routes")!;
+    assert.deepEqual(err.backend, (routes.backends as unknown[])[0]);
+    assert.equal(err.status, 502);
+    assert.equal(err.method, "GET");
+    assert.equal(err.path, "/x");
+  } finally {
+    r.child.kill("SIGKILL");
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#22 E_UPSTREAM names the backend and request: Host, Group prefix, timeout=, and concurrent requests to different backends", async () => {
+  const dir = fixtureDir();
+  const mod = join(dir, "gw.mjs");
+  const deadA = await freePort();
+  const deadB = await freePort();
+  const { createServer: httpServer } = await import("node:http");
+  const slow = httpServer(() => {});
+  await new Promise<void>((r) => slow.listen(0, "127.0.0.1", r));
+  const slowPort = (slow.address() as AddressInfo).port;
+  writeFileSync(
+    mod,
+    gatewaySource(
+      `Host({ name: "a.localhost", children: [Upstream({ path: "/a/*", url: "http://127.0.0.1:${deadA}/a/" })] }),
+       Host({ name: "b.localhost", children: [Group({ prefix: "/g", children: [Upstream({ path: "/b/*", method: "POST", url: "http://127.0.0.1:${deadB}/b/" })] })] }),
+       Upstream({ path: "/slow/*", url: "http://127.0.0.1:${slowPort}/", timeout: 300 })`,
+    ),
+  );
+  const r = run(["serve", mod, "--port", "0", "--json", "--trust-proxy"]);
+  try {
+    const ev = await r.waitFor(ready);
+    const backends = r.events.find((e) => e.event === "routes")!.backends as { hostname: string; path: string; url: string; methods: string[] }[];
+    const byHost = (hostname: string) => backends.find((b) => b.hostname === hostname)!;
+    assert.deepEqual(byHost("a.localhost"), { hostname: "a.localhost", path: "/a/*", url: `http://127.0.0.1:${deadA}/a/`, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] });
+    assert.deepEqual(byHost("b.localhost"), { hostname: "b.localhost", path: "/g/b/*", url: `http://127.0.0.1:${deadB}/b/`, methods: ["POST"] });
+
+    // Interleave requests to all three backends at once; each event must be
+    // attributed to its own request's backend, not to whichever came last.
+    const sent: { method: string; path: string; host: string; status: number }[] = [];
+    for (let i = 0; i < 8; i++) {
+      sent.push({ method: "GET", path: `/a/${i}?q=${i}`, host: "a.localhost", status: 502 });
+      sent.push({ method: "POST", path: `/g/b/${i}`, host: "b.localhost", status: 502 });
+      if (i < 3) sent.push({ method: "GET", path: `/slow/${i}`, host: "c.localhost", status: 504 });
+    }
+    const statuses = await Promise.all(
+      sent.map(async (s) => (await fetch(`${ev.url as string}${s.path.slice(1)}`, { method: s.method, headers: { "x-forwarded-host": s.host }, body: s.method === "POST" ? "x" : undefined })).status),
+    );
+    assert.deepEqual(statuses, sent.map((s) => s.status));
+    for (let i = 0; i < 200 && r.events.filter((e) => e.code === "E_UPSTREAM").length < sent.length; i++) await new Promise((res) => setTimeout(res, 25));
+    const errors = r.events.filter((e) => e.code === "E_UPSTREAM");
+    assert.equal(errors.length, sent.length);
+    for (const s of sent) {
+      const err = errors.find((e) => e.path === s.path);
+      assert.ok(err, `no E_UPSTREAM for ${s.path}`);
+      assert.equal(err.method, s.method);
+      assert.equal(err.status, s.status);
+      assert.equal(err.fatal, false);
+      const expected = s.host === "c.localhost" ? byHost("*") : byHost(s.host);
+      assert.deepEqual(err.backend, expected, s.path);
+      if (s.status === 504) {
+        assert.equal(err.message, "upstream timed out");
+        assert.equal(err.address, undefined);
+      } else {
+        assert.equal(err.errno, "ECONNREFUSED");
+      }
+    }
+  } finally {
+    r.child.kill("SIGKILL");
+    slow.closeAllConnections();
+    slow.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#22 E_UPSTREAM from a handler= or app= upstream's own fetch has no backend", async () => {
+  const dir = fixtureDir();
+  const mod = join(dir, "gw.mjs");
+  const port = await freePort();
+  writeFileSync(mod, gatewaySource(`Upstream({ path: "/*", handler: (req) => fetch("http://127.0.0.1:${port}/") })`));
+  const r = run(["serve", mod, "--port", "0", "--json"]);
+  try {
+    const ev = await r.waitFor(ready);
+    assert.equal((await fetch(`${ev.url}x`)).status, 502);
+    const err = await r.waitFor((e) => e.event === "error");
+    assert.equal(err.code, "E_UPSTREAM");
+    assert.equal(err.errno, "ECONNREFUSED");
+    assert.equal(err.status, 502);
+    assert.equal("backend" in err, false);
+    assert.equal("method" in err, false);
   } finally {
     r.child.kill("SIGKILL");
     rmSync(dir, { recursive: true, force: true });

@@ -37,6 +37,26 @@ export async function describeRoutes(tree: unknown, options: CompileOptions = {}
   return { ...report, backends: collectBackends(tree) };
 }
 
+/** A `<Host>`'s name as `backends[].hostname` lists it (`"*"` outside any Host). */
+export function backendHostname(props: Record<string, unknown>): string {
+  return String(props.name ?? props.pattern ?? "*");
+}
+
+/**
+ * One `backends` entry: an `<Upstream url=>` under `hostname` and the Group
+ * `prefix` chain. `collectBackends()` lists these and `compile()` hands the
+ * same entry to the forwarding handler, so `E_UPSTREAM`'s `backend` (#22)
+ * deep-equals an entry of the `routes` event's `backends`.
+ */
+export function backendEntry(hostname: string, prefix: string, props: Record<string, unknown>): BackendEntry {
+  return {
+    hostname,
+    path: posixJoin(prefix || "/", (props.path as string | undefined) ?? "/*"),
+    url: props.url as string,
+    methods: typeof props.method === "string" ? [props.method] : ALL_METHODS,
+  };
+}
+
 /** The `<Upstream url=>` backends in `tree`, with the Host and Group prefixes they sit under. */
 export function collectBackends(tree: unknown): BackendEntry[] {
   const out: BackendEntry[] = [];
@@ -50,19 +70,14 @@ export function collectBackends(tree: unknown): BackendEntry[] {
     const children = node.children as DescriptorChild[];
     switch (node.tag) {
       case "host":
-        walk(children, String(props.name ?? props.pattern ?? "*"), prefix);
+        walk(children, backendHostname(props), prefix);
         return;
       case "group":
         walk(children, hostname, posixJoin(prefix, (props.prefix as string | undefined) ?? ""));
         return;
       case "upstream":
         if (typeof props.url === "string") {
-          out.push({
-            hostname,
-            path: posixJoin(prefix || "/", (props.path as string | undefined) ?? "/*"),
-            url: props.url,
-            methods: typeof props.method === "string" ? [props.method] : ALL_METHODS,
-          });
+          out.push(backendEntry(hostname, prefix, props));
         }
         return;
       case "gateway":

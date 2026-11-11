@@ -8,6 +8,7 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 ## [Unreleased]
 
 ### Added
+- **[#22] `E_UPSTREAM` names the backend and the request.** A failed `<Upstream url=>` fetch's `error` event now also has `backend` (that Upstream's entry in the `routes` event's `backends`: `hostname`, `path`, `url`, `methods`), `status` (502, or 504 on `timeout=`), and the gateway request's `method` and `path`. Additive in schema `v: 1`. The details travel on the failed fetch's own error, so concurrent requests to different backends are each attributed correctly; a supervisor no longer pairs `E_UPSTREAM` with the next 502/504 `request` event or matches `address`/`port` (which a timeout or DNS failure doesn't have). The `request` event itself is unchanged (servable writes it), and a `handler=`/`app=` upstream's own failed `fetch()` gets `status` but no `backend`. README: "The `E_UPSTREAM` event".
 - **[#19] Every example answers `/`.** Each gateway ends with a host-agnostic `<Route path="/">` index of what it serves (hosts, paths, the `curl -H` to try), so opening `http://localhost:<port>/` lands somewhere instead of on a 404. `04-full-stack`'s mounted servable app gets its own `/` too, since that host's requests never reach the gateway's fallback. `03-dialback-tunnel` already answered `/` (an any-host `<Upstream path="/*">`). Part of johnhenry/sitefile-desktop#154.
 
 ### Changed

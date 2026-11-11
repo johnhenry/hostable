@@ -22,6 +22,7 @@ import {
   type RunHooks,
 } from "@johnhenry/servable/cli";
 import type { CompileResult } from "@johnhenry/servable";
+import { UPSTREAM_FAILURE, type UpstreamFailure } from "./forward.js";
 
 export const LABEL = "hostable";
 export const SERVE_USAGE = serveUsage(LABEL, "<Gateway>...</Gateway>");
@@ -50,12 +51,19 @@ export function routesFields(app: CompileResult, reporter?: Reporter): Promise<E
   return servableRoutesFields(app, reporter, ROUTES_UNKNOWN_MESSAGE);
 }
 
-/** A failed `<Upstream url=>` fetch: 502 (504 on its `timeout=`), with a non-fatal `E_UPSTREAM` event. */
+/**
+ * A failed `<Upstream url=>` fetch: 502 (504 on its `timeout=`), with a
+ * non-fatal `E_UPSTREAM` event carrying that `status`. For a `url=` backend
+ * it also carries `backend` (its `backends` entry from the `routes` event)
+ * and the request's `method` and `path` (#22).
+ */
 export function upstreamError(error: unknown, reporter: Reporter): Response | undefined {
   const e = error as { name?: string; message?: string; cause?: { code?: string; address?: string; port?: number } };
   const timedOut = e?.name === "AbortError" || e?.name === "TimeoutError";
   const unreachable = e instanceof TypeError && e.message === "fetch failed";
   if (!timedOut && !unreachable) return undefined;
+  const status = timedOut ? 504 : 502;
+  const failure = (error as { [UPSTREAM_FAILURE]?: UpstreamFailure })[UPSTREAM_FAILURE];
   reporter.event("error", {
     code: "E_UPSTREAM",
     message: timedOut ? "upstream timed out" : `upstream unreachable: ${e.cause?.code ?? e.message}`,
@@ -63,8 +71,9 @@ export function upstreamError(error: unknown, reporter: Reporter): Response | un
     errno: e.cause?.code,
     address: e.cause?.address,
     port: e.cause?.port,
+    status,
+    ...(failure ? { backend: failure.backend, method: failure.method, path: failure.path } : {}),
   });
-  const status = timedOut ? 504 : 502;
   return new Response(timedOut ? "Gateway Timeout" : "Bad Gateway", { status });
 }
 
