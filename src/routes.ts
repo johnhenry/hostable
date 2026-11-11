@@ -3,94 +3,42 @@
  * backends it forwards to (issue #11). A supervisor registers the
  * hostnames with its name router and starts/health-checks the backends.
  *
- * Routes come from servable's own Layout stage run over the same lowered
- * tree `compile()` uses, so mounted fileable trees and `Group from=` globs
- * are listed too, not only literal `<Route>`s. Backends come from the
+ * Routes come from servable's own route report (servable#21), read off
+ * Layout's output for the same lowered tree `compile()` uses, so mounted
+ * fileable trees and `Group from=` globs are listed too, not only literal
+ * `<Route>`s. Backends come from the
  * hostable tree itself (after lowering, an `<Upstream url=>` is just a
  * handler).
  */
 import * as servable from "@johnhenry/servable";
-import type { CompileOptions } from "@johnhenry/servable";
+import type { BackendEntry, CompileOptions, RoutesReport } from "@johnhenry/servable";
 import { lower } from "./compile.js";
 import { join as posixJoin } from "./posix.js";
 import { FRAGMENT, isDescriptor } from "./types.js";
 import type { DescriptorChild } from "./types.js";
 
-export interface RouteEntry {
-  /** URLPattern pathname syntax, as servable matches it (`/users/:id`, `/static/*`). */
-  path: string;
-  methods: string[];
-  /** Present for a `<Redirect>`: where it points. */
-  redirect?: string;
-}
-
-export interface HostEntry {
-  /** A hostname, a URLPattern hostname pattern (`*.example.com`), or `*` for routes outside any `<Host>`. */
-  hostname: string;
-  /** True when `hostname` is a pattern rather than one literal name. */
-  pattern: boolean;
-  routes: RouteEntry[];
-}
-
-export interface BackendEntry {
-  /** The `<Host>` the `<Upstream>` is under, or `*`. */
-  hostname: string;
-  /** The path it's mounted at, Group prefixes included. */
-  path: string;
-  /** The `url=` it forwards to. */
-  url: string;
-  methods: string[];
-}
-
-export interface RoutesReport {
-  hosts: HostEntry[];
-  backends: BackendEntry[];
-}
+// One structure for a gateway's routes and an app's (servable#21): the
+// report is servable's, with `backends` filled in here. Each route has
+// `path`, `methods` and (for a redirect) `redirect`, as since #11, plus
+// servable's `kind`, `params`, `hasParams`, `prefix` and `status`; each
+// host has `notFoundPrefixes`; the report has `notFound`.
+export type { RoutesReport, HostEntry, RouteEntry, RouteKind, BackendEntry } from "@johnhenry/servable";
 
 const ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 
-const isPattern = (hostname: string): boolean => hostname === "*" || /[*:(){}\\]/.test(hostname);
-
-/** Lists what `tree` (an uncompiled hostable/servable tree) answers. Needs `@johnhenry/servable` >= 0.0.3. */
+/** Lists what `tree` (an uncompiled hostable/servable tree) answers. Needs `@johnhenry/servable` >= 0.3.0. */
 export async function describeRoutes(tree: unknown, options: CompileOptions = {}): Promise<RoutesReport> {
-  const clone = (servable as { cloneDescriptorTree?: (t: unknown) => unknown }).cloneDescriptorTree;
-  if (typeof clone !== "function") {
-    throw new Error("listing routes needs @johnhenry/servable >= 0.0.3 (for cloneDescriptorTree)");
+  const describe = (servable as { describeRoutes?: (t: unknown, o?: CompileOptions) => Promise<RoutesReport> }).describeRoutes;
+  if (typeof describe !== "function") {
+    throw new Error("listing routes needs @johnhenry/servable >= 0.3.0 (for describeRoutes)");
   }
-  // The same Build -> Resolve -> Layout servable's compile() runs, on a
-  // private copy (Build mutates its input).
-  const lowered = clone(lower(tree, { ipfsGateway: options.ipfsGateway }));
-  const built = servable.build(lowered);
-  const resolved = await servable.resolve(built, options);
-  const laidOut = servable.layout(resolved);
-
-  const hosts = new Map<string, Map<string, RouteEntry>>();
-  const entryFor = (hostname: string, key: string, make: () => RouteEntry): RouteEntry => {
-    let routes = hosts.get(hostname);
-    if (!routes) hosts.set(hostname, (routes = new Map()));
-    let entry = routes.get(key);
-    if (!entry) routes.set(key, (entry = make()));
-    return entry;
-  };
-  for (const route of laidOut.routes) {
-    const hostname = route.pattern.hostname || "*";
-    const path = route.pattern.pathname;
-    const entry = entryFor(hostname, `route:${path}`, () => ({ path, methods: [] }));
-    if (!entry.methods.includes(route.method)) entry.methods.push(route.method);
-  }
-  for (const redirect of laidOut.redirects) {
-    const hostname = redirect.pattern.hostname || "*";
-    const path = redirect.pattern.pathname;
-    entryFor(hostname, `redirect:${path}`, () => ({ path, methods: ["*"], redirect: redirect.to }));
-  }
-
-  return {
-    hosts: [...hosts].map(([hostname, routes]) => ({ hostname, pattern: isPattern(hostname), routes: [...routes.values()] })),
-    backends: collectBackends(tree),
-  };
+  // servable runs Build -> Resolve -> Layout on its own copy of the lowered tree.
+  const report = await describe(lower(tree, { ipfsGateway: options.ipfsGateway }), options);
+  return { ...report, backends: collectBackends(tree) };
 }
 
-function collectBackends(tree: unknown): BackendEntry[] {
+/** The `<Upstream url=>` backends in `tree`, with the Host and Group prefixes they sit under. */
+export function collectBackends(tree: unknown): BackendEntry[] {
   const out: BackendEntry[] = [];
   const walk = (node: unknown, hostname: string, prefix: string): void => {
     if (Array.isArray(node)) {

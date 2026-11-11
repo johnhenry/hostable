@@ -51,8 +51,11 @@ locally.
   (#13, servable#17); there is no copy here any more.** Same `--json`
   contract (envelope, `v` schema version, events, error and exit codes),
   which Sitefile Desktop consumes. hostable-only parts live in
-  `src/hostable-cli.ts` as `RunHooks`: the `routes` event (`afterLoad`) and
-  its human rendering (`renderers`), the `routes` command, `E_UPSTREAM`
+  `src/hostable-cli.ts` as `RunHooks`: the `routes` event (`afterLoad`,
+  servable's route report plus `url=` backends; the command, fields and
+  human rendering are servable's `routesCommand`/`routesFields`/
+  `formatRoutesHuman` since servable#21, so add route fields there first),
+  `E_UPSTREAM`
   (`requestError`, `errorCodes`), and the strings (`hostable` label, usage,
   `hostable-reload`, the 500 page's "the gateway failed to load", the
   `<Gateway>` hint). A change to the shared runtime goes into servable first,

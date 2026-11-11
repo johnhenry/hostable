@@ -8,7 +8,7 @@ import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { compile, describeRoutes, Gateway, Group, Host, Redirect, Route, Upstream } from "../src/index.js";
+import { compile, describeRoutes, Gateway, Group, Host, NotFound, Redirect, Route, Upstream } from "../src/index.js";
 import { SCHEMA_VERSION } from "@johnhenry/servable/cli";
 
 const distRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -191,7 +191,13 @@ test("routes command: JSON and human output, without listening", async () => {
     assert.ok(a.routes.some((rt) => rt.path === "/old" && rt.redirect === "/new"));
     const any = hosts.find((h) => h.hostname === "*")!;
     assert.equal(any.pattern, true);
-    assert.deepEqual(any.routes, [{ path: "/health", methods: ["GET"] }]);
+    // #19: servable#21's fields are added; #11's path/methods are unchanged.
+    assert.deepEqual(any.routes, [{ path: "/health", methods: ["GET"], kind: "static", params: [], hasParams: false, prefix: "" }]);
+    assert.deepEqual(
+      a.routes.map((rt) => [rt.path, (rt as { kind?: string }).kind, (rt as { prefix?: string }).prefix]),
+      [["/api/*", "handler", "/api"], ["/old", "redirect", ""]],
+    );
+    assert.equal(ev.notFound, false);
     assert.deepEqual(ev.backends, [
       { hostname: "a.localhost", path: "/api/*", url: "http://127.0.0.1:9/", methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
     ]);
@@ -398,7 +404,15 @@ test("describeRoutes: Host patterns, Group prefixes, and compile()'s non-enumera
     ],
   });
   const report = await describeRoutes(tree);
-  assert.deepEqual(report.hosts, [{ hostname: "*.example.test", pattern: true, routes: [{ path: "/g/r", methods: ["PUT"] }] }]);
+  assert.deepEqual(report.hosts, [
+    {
+      hostname: "*.example.test",
+      pattern: true,
+      routes: [{ path: "/g/r", methods: ["PUT"], kind: "static", params: [], hasParams: false, prefix: "/g" }],
+      notFoundPrefixes: [],
+    },
+  ]);
+  assert.equal(report.notFound, false);
   assert.deepEqual(report.backends, []);
   const compiled = await compile(tree);
   assert.ok(!Object.keys(compiled).includes("describeRoutes"));
@@ -408,4 +422,58 @@ test("describeRoutes: Host patterns, Group prefixes, and compile()'s non-enumera
   assert.deepEqual(await describeRoutes(tree), report);
   void Redirect;
   void Upstream;
+});
+
+test("#19 the routes report is servable's (servable#21) plus backends: kinds, prefixes, NotFound, Group roots", async () => {
+  const backend = { fetch: async () => new Response("app") };
+  const tree = Gateway({
+    children: [
+      Host({
+        name: "a.localhost",
+        children: [
+          Group({ prefix: "/api", children: [Route({ path: "/", method: "GET", children: ["root"] }), Upstream({ path: "/v1/*", url: "http://127.0.0.1:9/" })] }),
+          Upstream({ path: "/app/*", method: "GET", app: backend }),
+          NotFound({ children: ["no"] }),
+        ],
+      }),
+    ],
+  });
+  const report = await describeRoutes(tree);
+  assert.deepEqual(Object.keys(report), ["hosts", "backends", "notFound"]);
+  assert.equal(report.notFound, true);
+  const [host] = report.hosts;
+  assert.equal(host.hostname, "a.localhost");
+  assert.deepEqual(host.notFoundPrefixes, ["/"]);
+  assert.deepEqual(
+    host.routes.map((r) => ({ path: r.path, methods: r.methods.length, kind: r.kind, hasParams: r.hasParams, prefix: r.prefix })),
+    [
+      // A Group's own path="/" is listed at the prefix (it used to read "/api{/}?", the match pattern).
+      { path: "/api", methods: 1, kind: "static", hasParams: false, prefix: "/api" },
+      { path: "/api/v1/*", methods: 7, kind: "handler", hasParams: true, prefix: "/api" },
+      { path: "/app/*", methods: 1, kind: "handler", hasParams: true, prefix: "" },
+    ],
+  );
+  assert.deepEqual(report.backends, [
+    { hostname: "a.localhost", path: "/api/v1/*", url: "http://127.0.0.1:9/", methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+  ]);
+  assert.deepEqual(await (await compile(tree)).describeRoutes(), report);
+});
+
+test("#19 hostable routes lists an app compiled by servable directly (backends empty)", async () => {
+  const dir = fixtureDir();
+  const mod = join(dir, "servable-app.mjs");
+  writeFileSync(
+    mod,
+    `import { Router, Route, compile } from "@johnhenry/servable";\nexport default await compile(Router({ children: [Route({ path: "/", method: "GET", children: ["hi"] })] }));\n`,
+  );
+  try {
+    const r = run(["routes", mod, "--json"]);
+    assert.equal(await r.exit, 0);
+    assert.deepEqual(r.events.map((e) => e.event), ["routes"]);
+    assert.equal(r.events[0].complete, true);
+    assert.deepEqual(r.events[0].backends, []);
+    assert.deepEqual((r.events[0].hosts as { routes: { path: string }[] }[])[0].routes.map((x) => x.path), ["/"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
