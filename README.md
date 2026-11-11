@@ -409,27 +409,51 @@ load, before `ready`. `routes --json` prints it as its only line and exits
 without listening.
 
 ```json
-{"v":1,"event":"routes","time":"…","complete":true,
+{"v":1,"event":"routes","time":"…",
  "hosts":[
-   {"hostname":"www.localhost","pattern":false,"routes":[{"path":"/","methods":["GET"]},{"path":"/home","methods":["*"],"redirect":"/"}]},
-   {"hostname":"api.localhost","pattern":false,"routes":[{"path":"/v1/*","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]}]}],
- "backends":[{"hostname":"api.localhost","path":"/v1/*","url":"http://127.0.0.1:3021/","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]}]}
+   {"hostname":"www.localhost","pattern":false,"routes":[
+     {"path":"/","methods":["GET"],"kind":"static","params":[],"hasParams":false,"prefix":""},
+     {"path":"/home","methods":["*"],"kind":"redirect","params":[],"hasParams":false,"prefix":"","redirect":"/","status":301}],
+    "notFoundPrefixes":[]},
+   {"hostname":"api.localhost","pattern":false,"routes":[
+     {"path":"/v1/*","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"],"kind":"handler","params":[],"hasParams":true,"prefix":""}],
+    "notFoundPrefixes":[]},
+   {"hostname":"*","pattern":true,"routes":[
+     {"path":"/","methods":["GET"],"kind":"static","params":[],"hasParams":false,"prefix":""}],
+    "notFoundPrefixes":[]}],
+ "backends":[{"hostname":"api.localhost","path":"/v1/*","url":"http://127.0.0.1:3021/","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]}],
+ "notFound":false,"complete":true}
 ```
+
+It's the same structure as `servable serve --json`'s `routes` event
+(servable#21; servable's README "Listing routes" has the full field
+table), with `backends` filled in. An app's routes and a gateway's read
+the same way.
 
 - `hosts[].hostname` is a `<Host name>`, a `<Host pattern>` (`pattern:
   true`, URLPattern hostname syntax such as `*.example.com`), or `*` for
   routes outside any `<Host>`. Register the literal names with your name
   router. A pattern or `*` needs a wildcard rule or a fixed name of your
   choosing.
-- `routes[].path` uses URLPattern pathname syntax. The list comes from
-  servable's own Layout stage, so mounted fileable trees and `Group from=`
-  routes are included.
-- `complete: false` (with an `E_ROUTES_UNKNOWN` warning) means the default
-  export wasn't made by hostable's `compile()`, so it can't describe itself.
+- `routes[].path` uses URLPattern pathname syntax, Group prefixes
+  included. The list comes from servable's own Layout stage, so mounted
+  fileable trees and `Group from=` routes are included. A Group's own
+  `path="/"` route is listed at the prefix (`/api`).
+- `routes[].kind` is `handler` (an `<Upstream>` of any kind is one),
+  `static`, `src`, `redirect` or `mount`; `params`/`hasParams` say whether
+  the path is a pattern; `prefix` is the Group prefix applied. Redirects
+  have `redirect` and `status`.
+- `hosts[].notFoundPrefixes` and `notFound` say where a `<NotFound>`
+  answers unmatched requests.
+- `complete: false` (with an `E_ROUTES_UNKNOWN` warning from `routes`)
+  means the default export can't describe itself: it wasn't made by
+  hostable's `compile()` or servable >= 0.3's. An app compiled by servable
+  directly is listed, with `backends: []`.
 
 The same report is available in code: `await compiled.describeRoutes()` (a
-non-enumerable method on what `compile()` returns), or
-`describeRoutes(tree)`. Both need `@johnhenry/servable` 0.0.3 or later.
+non-enumerable method on what `compile()` returns; it reads the table
+`compile()` already built), or `describeRoutes(tree)`. Both need
+`@johnhenry/servable` 0.3.0 or later.
 
 ### Backends
 
