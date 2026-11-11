@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-11
 
 ### Added
 - **[#22] `E_UPSTREAM` names the backend and the request.** A failed `<Upstream url=>` fetch's `error` event now also has `backend` (that Upstream's entry in the `routes` event's `backends`: `hostname`, `path`, `url`, `methods`), `status` (502, or 504 on `timeout=`), and the gateway request's `method` and `path`. Additive in schema `v: 1`. The details travel on the failed fetch's own error, so concurrent requests to different backends are each attributed correctly; a supervisor no longer pairs `E_UPSTREAM` with the next 502/504 `request` event or matches `address`/`port` (which a timeout or DNS failure doesn't have). The `request` event itself is unchanged (servable writes it), and a `handler=`/`app=` upstream's own failed `fetch()` gets `status` but no `backend`. README: "The `E_UPSTREAM` event".

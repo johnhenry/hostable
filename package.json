@@ -1,6 +1,6 @@
 {
   "name": "@johnhenry/hostable",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Declaratively describe an API gateway using JSX -- routes across multiple domains/backends by Host header, on top of @johnhenry/servable's single-app dispatcher.",
   "type": "module",
   "main": "./dist/src/index.js",
