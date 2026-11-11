@@ -16,6 +16,7 @@
  *   npm run build && node dist/examples/05-nested-jsx/server.js
  * Then (the mounted Dir's own name, "dist", IS part of the URL -- see
  * servable's README, "Mounting a fileable tree"):
+ *   curl http://localhost:3014/   # an index of what this gateway answers
  *   curl http://localhost:3014/static/dist -H "Host: nested.example.com"   # no trailing slash -- posixDirname never adds one except for the true root
  *   curl http://localhost:3014/static/dist/about/index.html -H "Host: nested.example.com"
  *   curl http://localhost:3014/api/hello -H "Host: nested.example.com"
@@ -55,6 +56,16 @@ const app = (
     <Host name="proxy.example.com">
       <Upstream path="/*" url={`http://localhost:${legacyPort}/`} />
     </Host>
+    {/* Any host, last: a plain http://localhost:3014/ (no matching Host header) lands on this index instead of a 404. */}
+    <Route path="/" method="GET">
+      <h1>Nested JSX gateway</h1>
+      <p>Routes by Host header; try these with curl -H:</p>
+      <ul>
+        <li><code>Host: nested.example.com GET /static/dist</code></li>
+        <li><code>Host: nested.example.com GET /api/hello</code></li>
+        <li><code>Host: proxy.example.com GET /* (proxied)</code></li>
+      </ul>
+    </Route>
   </Gateway>
 );
 

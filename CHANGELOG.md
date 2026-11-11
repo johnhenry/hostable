@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
+## [Unreleased]
+
+### Added
+- **[#19] Every example answers `/`.** Each gateway ends with a host-agnostic `<Route path="/">` index of what it serves (hosts, paths, the `curl -H` to try), so opening `http://localhost:<port>/` lands somewhere instead of on a 404. `04-full-stack`'s mounted servable app gets its own `/` too, since that host's requests never reach the gateway's fallback. `03-dialback-tunnel` already answered `/` (an any-host `<Upstream path="/*">`). Part of johnhenry/sitefile-desktop#154.
+
 ## [0.1.1] - 2026-11-10
 
 ### Changed
