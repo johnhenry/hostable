@@ -1,23 +1,60 @@
 /**
- * hostable's additions to the shared serve contract (serve-cli.ts): the
- * `routes` event and command, and `E_UPSTREAM` for unreachable backends.
+ * hostable's CLI: `hostable serve` runs `@johnhenry/servable/cli`, servable's
+ * own serve runtime (same options, NDJSON envelope, `v` schema version,
+ * events, error and exit codes, lifecycle), with hostable's hooks: the
+ * `routes` event and command, `E_UPSTREAM` for unreachable backends, and
+ * hostable's product strings. Nothing reachable from `src/index.ts` imports
+ * this file.
  */
 import { parseArgs } from "node:util";
 import { resolve as resolvePath } from "node:path";
 import type { CompileResult } from "@johnhenry/servable";
 import {
   CliError,
-  ERROR_CODES,
   EXIT,
   createReporter,
   errorFields,
+  exitCodeFor,
   loadApp,
   serveCommand,
-  type ErrorCode,
+  serveUsage,
   type EventFields,
   type Reporter,
-} from "./serve-cli.js";
+  type RunHooks,
+} from "@johnhenry/servable/cli";
 import type { RoutesReport } from "./routes.js";
+
+export const LABEL = "hostable";
+export const SERVE_USAGE = serveUsage(LABEL, "<Gateway>...</Gateway>");
+/** hostable's codes on top of servable's `ERROR_CODES`. */
+export const HOSTABLE_ERROR_CODES = {
+  /** Never fatal: an `<Upstream url=...>` backend couldn't be reached. The client gets a 502 (504 on its `timeout=`). */
+  E_UPSTREAM: EXIT.INTERNAL,
+} as const;
+
+/** Human rendering of a `routes` event: one line per host, its paths indented. */
+export function formatRoutesHuman(fields: EventFields): string {
+  const hosts = (fields.hosts ?? []) as { hostname: string; routes: { path: string; methods: string[]; redirect?: string }[] }[];
+  const lines: string[] = [];
+  for (const host of hosts) {
+    lines.push(host.hostname === "*" ? "(any host)" : host.hostname);
+    for (const r of host.routes) lines.push(`  ${r.methods.join(",").padEnd(8)} ${r.path}${r.redirect ? ` -> ${r.redirect}` : ""}`);
+  }
+  const backends = (fields.backends ?? []) as { hostname: string; path: string; url: string }[];
+  if (backends.length) {
+    lines.push("backends:");
+    for (const b of backends) lines.push(`  ${b.hostname === "*" ? "" : b.hostname}${b.path} -> ${b.url}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+const renderers = { routes: (fields: EventFields) => ({ to: "stdout" as const, text: formatRoutesHuman(fields) }) };
+const loadOptions = { reloadParam: "hostable-reload", compileHint: "export default await compile(<Gateway>...</Gateway>)" };
+
+/** hostable's reporter: servable's, labelled `hostable`, with the `routes` rendering. */
+export function hostableReporter(json: boolean): Reporter {
+  return createReporter(json, { label: LABEL, renderers });
+}
 
 export const ROUTES_USAGE = `Usage: hostable routes <module> [--json]
 
@@ -61,17 +98,25 @@ export function upstreamError(error: unknown, reporter: Reporter): Response | un
   return new Response(timedOut ? "Gateway Timeout" : "Bad Gateway", { status });
 }
 
+/** Everything that makes servable's serve runtime `hostable serve`. */
+export const HOSTABLE_HOOKS: RunHooks & { usage: string } = {
+  label: LABEL,
+  usage: SERVE_USAGE,
+  ...loadOptions,
+  loadFailedMessage: "the gateway failed to load",
+  errorCodes: HOSTABLE_ERROR_CODES,
+  renderers,
+  afterLoad: async (app, reporter) => reporter.event("routes", await routesFields(app, reporter)),
+  requestError: upstreamError,
+};
+
 export function hostableServe(argv: string[]): Promise<number> {
-  return serveCommand(argv, {
-    label: "hostable",
-    afterLoad: async (app, reporter) => reporter.event("routes", await routesFields(app, reporter)),
-    requestError: upstreamError,
-  });
+  return serveCommand(argv, HOSTABLE_HOOKS);
 }
 
 export async function routesCommand(argv: string[]): Promise<number> {
   const json = argv.includes("--json");
-  const reporter = createReporter(json, "hostable");
+  const reporter = hostableReporter(json);
   const end = (name: string, fields: EventFields) => new Promise<void>((done) => reporter.final(name, fields, done));
   let parsed;
   try {
@@ -89,13 +134,13 @@ export async function routesCommand(argv: string[]): Promise<number> {
   }
   if (json) console.log = console.info = console.debug = (...args: unknown[]) => console.error(...args);
   try {
-    const app = await loadApp(resolvePath(parsed.positionals[0]));
+    const app = await loadApp(resolvePath(parsed.positionals[0]), 0, loadOptions);
     const fields = await routesFields(app, reporter);
     await end("routes", fields);
     return EXIT.OK;
   } catch (error) {
     const fields = errorFields(error, true);
     await end("error", fields);
-    return ERROR_CODES[fields.code as ErrorCode] ?? EXIT.INTERNAL;
+    return exitCodeFor(fields.code, HOSTABLE_ERROR_CODES);
   }
 }

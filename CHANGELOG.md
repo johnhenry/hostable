@@ -7,6 +7,15 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed
+- **[#13] The CLI runs servable's serve runtime, `@johnhenry/servable/cli` (servable#17), instead of a hand-kept copy.** `src/serve-cli.ts` is deleted. hostable's parts are `RunHooks` in `src/hostable-cli.ts`:
+  - the `routes` event and its human rendering
+  - `E_UPSTREAM` (502/504) through `requestError` and `errorCodes`
+  - the `hostable` label and usage, the `hostable-reload` reload parameter, "the gateway failed to load" on the 500 page, and the `<Gateway>` hint in `E_NOT_AN_APP`
+
+  The output of `hostable serve` and `hostable routes` doesn't change. `test/serve-cli.test.ts` now also pins those strings, the human `routes` block and `E_UPSTREAM` 502/504, and the same suite passes against the old copy. `serve` also picks up servable#15: listen errors come from the server's error event, and connections still open after the drain timeout are force-closed. Events and exit codes are unchanged.
+- **[#13] `@johnhenry/servable` range raised to `>=0.2.0 <0.3.0`**, the first release with `./cli`.
+
 ## [0.1.0] - 2026-11-10
 
 ### Added
