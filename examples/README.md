@@ -4,7 +4,10 @@ Runnable TSX gateways, each a real, compiled multi-domain/reverse-proxy
 dispatcher started via the Node adapter. They compile alongside `src/`/
 `adapters/` (see `tsconfig.json`'s `include`). Every file's own header
 comment states its exact run command, port, and a few `curl -H "Host:
-..."` calls to try against it once running.
+..."` calls to try against it once running. Every gateway answers `/` with
+an index of what it serves (a host-agnostic route listed last, so a plain
+`http://localhost:<port>/` lands there rather than on a 404); where a
+`<Host>` would otherwise 404 at `/`, it has its own.
 
 | Example | Demonstrates |
 | --- | --- |

@@ -7,6 +7,9 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+- **[#19] Every example answers `/`.** Each gateway ends with a host-agnostic `<Route path="/">` index of what it serves (hosts, paths, the `curl -H` to try), so opening `http://localhost:<port>/` lands somewhere instead of on a 404. `04-full-stack`'s mounted servable app gets its own `/` too, since that host's requests never reach the gateway's fallback. `03-dialback-tunnel` already answered `/` (an any-host `<Upstream path="/*">`). Part of johnhenry/sitefile-desktop#154.
+
 ### Changed
 - **[#19] The `routes` event and `hostable routes` use servable's route report (servable#21), so a gateway's routes and an app's have one structure.** It's additive: every field from #11 stays (`hosts[].hostname`/`pattern`/`routes[].path`/`methods`/`redirect`, `backends`, `complete`). Each route gains `kind`, `params`, `hasParams`, `prefix` and, for redirects, `status`; each host gains `notFoundPrefixes`; the report gains `notFound`. One value is different: a Group's own `path="/"` route used to be listed as its match pattern (`/api{/}?`) and is now listed at its canonical path (`/api`), which is a link a UI can open.
 - **[#19] The code is servable's now.** `routesCommand`, `routesFields` and `formatRoutesHuman` call `@johnhenry/servable/cli`'s, with hostable's label, usage and `E_ROUTES_UNKNOWN` message, and `describeRoutes(tree)` is servable's on the lowered tree plus `backends`. `compile()`'s `describeRoutes()` reads the table servable's `compile()` already built, rather than running Build/Resolve/Layout again on every `serve` load. The exports and the human output are unchanged. `hostable routes --help` gains an options list.
