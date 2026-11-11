@@ -27,6 +27,7 @@ backends, addressed by domain as well as path.
 - [Command line](#command-line)
   - [The `routes` event](#the-routes-event)
   - [Backends](#backends)
+  - [The `E_UPSTREAM` event](#the-e_upstream-event)
   - [Node's permission model](#nodes-permission-model)
 - [Non-goals](#non-goals)
 - [Adding a new primitive](#adding-a-new-primitive)
@@ -400,7 +401,7 @@ not `.tsx`. See [`examples/07-serve-cli`](./examples/07-serve-cli/gateway.tsx).
 | 3 | `E_MODULE_NOT_FOUND`, `E_MODULE_LOAD`, `E_NOT_AN_APP` | The module is missing, threw while loading, or its default export isn't a compiled app. Under `--watch` these aren't fatal: the server starts anyway and serves a 500. |
 | 4 | `E_LISTEN` | Couldn't listen (`errno`, e.g. `EADDRINUSE`). |
 | 5 | `E_ACCESS_DENIED` | Node's permission model refused something. |
-| | `E_REQUEST`, `E_UPSTREAM` | Never fatal: a handler threw (500), or a `url=` backend was unreachable (502) or hit its `timeout=` (504). |
+| | `E_REQUEST`, `E_UPSTREAM` | Never fatal: a handler threw (500), or a `url=` backend was unreachable (502) or hit its `timeout=` (504); `E_UPSTREAM` names the backend and request (see "The `E_UPSTREAM` event"). |
 
 ### The `routes` event
 
@@ -466,14 +467,45 @@ supervisor owns them:
    convention).
 2. Start or keep `hostable serve` running. Order doesn't matter: a request
    to a backend that isn't up gets a **502** and a non-fatal `error` event
-   with `code: "E_UPSTREAM"`, `errno` (e.g. `ECONNREFUSED`), `address` and
-   `port`, so you can see which backend to restart. A `timeout=` that runs
-   out gets a **504** with the same code.
+   with `code: "E_UPSTREAM"`. A `timeout=` that runs out gets a **504** with
+   the same code. See [The `E_UPSTREAM` event](#the-e_upstream-event) for
+   which backend it was.
 3. Restart backends independently. The gateway holds no connection state
    for them; the next request just works.
 
 `app=` and `handler=` upstreams run in the gateway's own process and aren't
 listed as backends.
+
+### The `E_UPSTREAM` event
+
+A failed `<Upstream url=…>` fetch is a non-fatal `error` event, followed by
+that request's own `request` event with the same status:
+
+```json
+{"v":1,"event":"error","time":"…","code":"E_UPSTREAM","message":"upstream unreachable: ECONNREFUSED","fatal":false,"errno":"ECONNREFUSED","address":"127.0.0.1","port":3021,"status":502,"backend":{"hostname":"api.localhost","path":"/v1/*","url":"http://127.0.0.1:3021/","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]},"method":"GET","path":"/v1/users"}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `status` | What the client got: `502` (unreachable) or `504` (`timeout=` ran out). |
+| `errno`, `address`, `port` | From Node's `fetch()` error, when it has them. A timeout or a DNS failure has no `address`/`port`. |
+| `backend` | The backend it was for: equal (`deepEqual`) to that `<Upstream>`'s entry in the `routes` event's `backends` (`hostname`, `path`, `url`, `methods`). |
+| `method`, `path` | The gateway request's method and its path and query, as the `request` event reports them. |
+
+`backend`, `method` and `path` travel with the failed fetch, so concurrent
+requests to different backends are each attributed to their own; no
+pairing with the next `request` event is needed. They're added in schema
+`v: 1` (additive), so an older hostable's events simply lack them.
+
+Not covered:
+
+- The paired `request` event doesn't carry `backend`. servable's serve
+  runtime writes that event and has no hook for extra fields; match on
+  `E_UPSTREAM`'s `method`/`path`/`status` instead.
+- A `handler=` or `app=` upstream that calls `fetch()` itself and fails
+  still maps to `E_UPSTREAM` (with `status`), but without `backend`,
+  `method` or `path`: it isn't a listed backend.
+- The human (non-`--json`) output is unchanged: `hostable: error E_UPSTREAM: upstream unreachable: ECONNREFUSED`.
 
 ### Node's permission model
 

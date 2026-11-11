@@ -49,13 +49,17 @@ import type { CompileOptions, CompileResult } from "@johnhenry/servable";
 import { FRAGMENT, isDescriptor, isFetchLike } from "./types.js";
 import type { Descriptor, DescriptorChild } from "./types.js";
 import { createAppUpstream, resolveUpstreamHandler } from "./forward.js";
-import { collectBackends, type RoutesReport } from "./routes.js";
+import { backendEntry, backendHostname, collectBackends, type RoutesReport } from "./routes.js";
 
 interface TransformCtx {
   /** Accumulated <Group prefix> chain -- used only for Upstream's own runtime prefix-stripping (forward.ts), never for compiling the match pattern (servable's own Layout does that now). */
   pathPrefix: string;
   /** See `CompileOptions.ipfsGateway` (servable). Threaded down from the top-level `compile()` options since `Upstream` handlers -- including any `url="ipfs://..."` forwarding target -- are built during this pre-transform, before servable's own `compile()` (and its own use of `ipfsGateway`) ever runs. */
   ipfsGateway?: string;
+  /** The enclosing `<Host>`'s name (`"*"` outside any), as `backends[].hostname` lists it. */
+  hostname: string;
+  /** The Group prefix chain as `backends[].path` lists it. Unlike `pathPrefix`, a nested `<Gateway>` doesn't reset it (`collectBackends()` doesn't either). */
+  backendPrefix: string;
 }
 
 /**
@@ -85,7 +89,7 @@ function transformChild(child: DescriptorChild, ctx: TransformCtx, path: string)
   switch (child.tag) {
     case "gateway": {
       return ServableRouter({
-        children: transformChildren(child.children, { pathPrefix: "", ipfsGateway: ctx.ipfsGateway }, `${path} > gateway`),
+        children: transformChildren(child.children, { ...ctx, pathPrefix: "" }, `${path} > gateway`),
       });
     }
     case "router": {
@@ -105,12 +109,16 @@ function transformChild(child: DescriptorChild, ctx: TransformCtx, path: string)
       // there's exactly one place that check lives, not two.
       return ServableHost({
         ...child.props,
-        children: transformChildren(child.children, ctx, `${path} > host`),
+        children: transformChildren(child.children, { ...ctx, hostname: backendHostname(child.props) }, `${path} > host`),
       });
     }
     case "group": {
       const prefix = (child.props.prefix as string | undefined) ?? "";
-      const nextCtx: TransformCtx = { pathPrefix: posixJoin(ctx.pathPrefix, prefix), ipfsGateway: ctx.ipfsGateway };
+      const nextCtx: TransformCtx = {
+        ...ctx,
+        pathPrefix: posixJoin(ctx.pathPrefix, prefix),
+        backendPrefix: posixJoin(ctx.backendPrefix, prefix),
+      };
       return ServableGroup({
         ...child.props,
         children: transformChildren(child.children, nextCtx, `${path} > group[${prefix}]`),
@@ -149,7 +157,10 @@ function transformChildren(children: DescriptorChild[], ctx: TransformCtx, path:
 
 function transformUpstream(node: Descriptor, ctx: TransformCtx, path: string): Descriptor | Descriptor[] {
   const upstreamPath = (node.props.path as string | undefined) ?? "/*";
-  const handler = resolveUpstreamHandler(node.props, ctx.pathPrefix, path, ctx.ipfsGateway);
+  // A url= backend's handler knows its own `backends` entry, so a failed
+  // fetch can say which backend it was for (E_UPSTREAM's `backend`, #22).
+  const backend = typeof node.props.url === "string" ? backendEntry(ctx.hostname, ctx.backendPrefix, node.props) : undefined;
+  const handler = resolveUpstreamHandler(node.props, ctx.pathPrefix, path, ctx.ipfsGateway, backend);
   const method = node.props.method as string | undefined;
   if (method !== undefined) return ServableRoute({ path: upstreamPath, method, handler });
   return ALL_METHODS.map((m) => ServableRoute({ path: upstreamPath, method: m, handler }));
@@ -172,7 +183,7 @@ export interface LowerOptions {
  */
 export function lower(tree: unknown, options: LowerOptions = {}): DescriptorChild | DescriptorChild[] {
   const roots = Array.isArray(tree) ? tree : [tree];
-  const rootCtx: TransformCtx = { pathPrefix: "", ipfsGateway: options.ipfsGateway };
+  const rootCtx: TransformCtx = { pathPrefix: "", ipfsGateway: options.ipfsGateway, hostname: "*", backendPrefix: "" };
   const transformed = roots.map((root) => transformChild(root as DescriptorChild, rootCtx, "root"));
   return transformed.length === 1 ? transformed[0] : transformed;
 }

@@ -14,11 +14,30 @@
  * gateway URL before `fetch()` ever sees it, done once per request inside
  * the same forwarding handler this module already builds.
  */
-import type { RouteContext } from "@johnhenry/servable";
+import type { BackendEntry, RouteContext } from "@johnhenry/servable";
 import { HostableError } from "./types.js";
 import type { UpstreamHandler } from "./types.js";
 
 const DEFAULT_IPFS_GATEWAY = "https://ipfs.io/ipfs/";
+
+/**
+ * Where a failed `<Upstream url=>` fetch records which backend and which
+ * request it was for (#22): set on the error `fetch()` threw, which is then
+ * rethrown unchanged. `hostable serve`'s `E_UPSTREAM` event reads it. It
+ * travels with the error, so concurrent requests to different backends are
+ * each attributed to their own. `Symbol.for`, so a CLI and a gateway module
+ * that load separate copies of this package still agree on it.
+ */
+export const UPSTREAM_FAILURE: unique symbol = Symbol.for("@johnhenry/hostable.upstream-failure") as never;
+
+export interface UpstreamFailure {
+  /** The failed `<Upstream url=>`'s entry in the `routes` event's `backends`. */
+  backend: BackendEntry;
+  /** The gateway request's method. */
+  method: string;
+  /** The gateway request's path and query, as the `request` event reports it (before any Group prefix is stripped). */
+  path: string;
+}
 
 /** `ipfs://<cid>/<path>` -> `${gateway}<cid>/<path>` -- same translation fileable/servable's own `ipfs://` support uses. */
 function rewriteIpfsUrl(target: URL, gateway: string): URL {
@@ -72,6 +91,7 @@ export function createUrlUpstream(
   prefix: string,
   timeout?: number,
   ipfsGateway: string = DEFAULT_IPFS_GATEWAY,
+  backend?: BackendEntry,
 ): UpstreamHandler {
   return async (req: Request): Promise<Response> => {
     const incoming = new URL(req.url);
@@ -96,6 +116,12 @@ export function createUrlUpstream(
         signal: controller?.signal,
         // @ts-expect-error -- duplex is required by Node's fetch when a body is a stream, not yet in lib.dom.d.ts.
         duplex: req.body ? "half" : undefined,
+      }).catch((error: unknown) => {
+        if (backend && error !== null && typeof error === "object") {
+          const failure: UpstreamFailure = { backend, method: req.method, path: incoming.pathname + incoming.search };
+          Object.defineProperty(error, UPSTREAM_FAILURE, { value: failure, configurable: true });
+        }
+        throw error;
       });
       return new Response(upstreamRes.body, {
         status: upstreamRes.status,
@@ -129,6 +155,7 @@ export function resolveUpstreamHandler(
   prefix: string,
   path: string,
   ipfsGateway?: string,
+  backend?: BackendEntry,
 ): UpstreamHandler {
   const hasUrl = props.url !== undefined;
   const hasApp = props.app !== undefined;
@@ -137,7 +164,7 @@ export function resolveUpstreamHandler(
     throw new HostableError("<Upstream> requires exactly one of `url`, `app`, or `handler`", path);
   }
   if (hasUrl) {
-    return createUrlUpstream(props.url as string, prefix, props.timeout as number | undefined, ipfsGateway);
+    return createUrlUpstream(props.url as string, prefix, props.timeout as number | undefined, ipfsGateway, backend);
   }
   if (hasApp) return createAppUpstream(props.app as FetchLike, prefix);
   return createHandlerUpstream(props.handler as UpstreamHandler);
