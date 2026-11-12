@@ -494,17 +494,24 @@ that request's own `request` event with the same status:
 
 `backend`, `method` and `path` travel with the failed fetch, so concurrent
 requests to different backends are each attributed to their own; no
-pairing with the next `request` event is needed. They're added in schema
+pairing with the next `request` event is needed. That `request` event
+carries the same `backend` too, so a supervisor reading only `request`
+lines can attribute a 502/504 to its backend:
+
+```json
+{"v":1,"event":"request","time":"…","backend":{"hostname":"api.localhost","path":"/v1/*","url":"http://127.0.0.1:3021/","methods":["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"]},"method":"GET","host":"api.localhost","path":"/v1/users","status":502,"ms":6.7}
+``` They're added in schema
 `v: 1` (additive), so an older hostable's events simply lack them.
 
 Not covered:
 
-- The paired `request` event doesn't carry `backend`. servable's serve
-  runtime writes that event and has no hook for extra fields; match on
-  `E_UPSTREAM`'s `method`/`path`/`status` instead.
 - A `handler=` or `app=` upstream that calls `fetch()` itself and fails
   still maps to `E_UPSTREAM` (with `status`), but without `backend`,
-  `method` or `path`: it isn't a listed backend.
+  `method` or `path`, and its `request` event has no `backend`: it isn't a
+  listed backend.
+- Only failed `url=` fetches add `backend` to the `request` event. A
+  backend's own 5xx response is passed through as-is, and its `request`
+  event has the usual fields only.
 - The human (non-`--json`) output is unchanged: `hostable: error E_UPSTREAM: upstream unreachable: ECONNREFUSED`.
 
 ### Node's permission model

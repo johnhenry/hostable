@@ -237,10 +237,13 @@ test("an unreachable url= backend is a 502 with a non-fatal E_UPSTREAM event", a
     assert.equal(err.code, "E_UPSTREAM");
     assert.equal(err.fatal, false);
     assert.equal(err.errno, "ECONNREFUSED");
-    assert.equal((await r.waitFor((e) => e.event === "request")).status, 502);
+    const request = await r.waitFor((e) => e.event === "request");
+    assert.equal(request.status, 502);
     // #22: the event names its backend (its `backends` entry) and the request.
     const routes = r.events.find((e) => e.event === "routes")!;
     assert.deepEqual(err.backend, (routes.backends as unknown[])[0]);
+    // servable#24: so does the paired request event.
+    assert.deepEqual(request.backend, err.backend);
     assert.equal(err.status, 502);
     assert.equal(err.method, "GET");
     assert.equal(err.path, "/x");
@@ -298,6 +301,11 @@ test("#22 E_UPSTREAM names the backend and request: Host, Group prefix, timeout=
       assert.equal(err.fatal, false);
       const expected = s.host === "c.localhost" ? byHost("*") : byHost(s.host);
       assert.deepEqual(err.backend, expected, s.path);
+      // servable#24: the paired request event carries the same backend.
+      const request = r.events.find((e) => e.event === "request" && e.path === s.path);
+      assert.ok(request, `no request event for ${s.path}`);
+      assert.equal(request.status, s.status);
+      assert.deepEqual(request.backend, expected, s.path);
       if (s.status === 504) {
         assert.equal(err.message, "upstream timed out");
         assert.equal(err.address, undefined);
@@ -328,6 +336,9 @@ test("#22 E_UPSTREAM from a handler= or app= upstream's own fetch has no backend
     assert.equal(err.status, 502);
     assert.equal("backend" in err, false);
     assert.equal("method" in err, false);
+    const request = await r.waitFor((e) => e.event === "request");
+    assert.equal(request.status, 502);
+    assert.equal("backend" in request, false);
   } finally {
     r.child.kill("SIGKILL");
     rmSync(dir, { recursive: true, force: true });
