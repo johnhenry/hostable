@@ -38,5 +38,7 @@ port and `curl` calls.
 All six run under plain Node >= 26 via the Node adapter (a thin re-export
 of servable's own, which delegates to `@johnhenry/leserve`'s `serve()`).
 `06-browsermesh` additionally needs the `browsermesh` packages listed in
-this repo's `devDependencies` -- they're dev-time integration examples,
-not runtime dependencies of the library itself.
+this repo's `devDependencies`, and `03-dialback-tunnel` needs
+`@johnhenry/dialback` and `@johnhenry/leserve` (for `toWebRequest`) from
+there -- they're dev-time integration examples, not runtime dependencies
+of the library itself.
