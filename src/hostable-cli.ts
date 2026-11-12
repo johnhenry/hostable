@@ -19,6 +19,7 @@ import {
   serveUsage,
   type EventFields,
   type Reporter,
+  type RequestErrorResult,
   type RunHooks,
 } from "@johnhenry/servable/cli";
 import type { CompileResult } from "@johnhenry/servable";
@@ -55,9 +56,10 @@ export function routesFields(app: CompileResult, reporter?: Reporter): Promise<E
  * A failed `<Upstream url=>` fetch: 502 (504 on its `timeout=`), with a
  * non-fatal `E_UPSTREAM` event carrying that `status`. For a `url=` backend
  * it also carries `backend` (its `backends` entry from the `routes` event)
- * and the request's `method` and `path` (#22).
+ * and the request's `method` and `path` (#22), and the paired `request`
+ * event gets the same `backend` (servable#24's `{ response, fields }`).
  */
-export function upstreamError(error: unknown, reporter: Reporter): Response | undefined {
+export function upstreamError(error: unknown, reporter: Reporter): RequestErrorResult | undefined {
   const e = error as { name?: string; message?: string; cause?: { code?: string; address?: string; port?: number } };
   const timedOut = e?.name === "AbortError" || e?.name === "TimeoutError";
   const unreachable = e instanceof TypeError && e.message === "fetch failed";
@@ -74,7 +76,9 @@ export function upstreamError(error: unknown, reporter: Reporter): Response | un
     status,
     ...(failure ? { backend: failure.backend, method: failure.method, path: failure.path } : {}),
   });
-  return new Response(timedOut ? "Gateway Timeout" : "Bad Gateway", { status });
+  const response = new Response(timedOut ? "Gateway Timeout" : "Bad Gateway", { status });
+  // servable#24: `backend` on the paired `request` event too.
+  return { response, fields: failure ? { backend: failure.backend } : {} };
 }
 
 /** Everything that makes servable's serve runtime `hostable serve`. */

@@ -7,6 +7,9 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+- **[servable#24] `backend` on the 502/504 `request` event.** A failed `<Upstream url=>` fetch's `request` event now carries the same `backend` as its `E_UPSTREAM` event, through servable's new `requestError` return form `{ response, fields }`. Additive in schema `v: 1`. A `handler=`/`app=` upstream's own failed `fetch()` still gets no `backend`. Needs the servable release that contains servable#24 (the dependency floor is raised to it). README: "The `E_UPSTREAM` event".
+
 ### Changed
 - **[#18] `@johnhenry/leserve` is a dev dependency again, at `^0.1.0`.** hostable's library code no longer imports it: the CLI runs `@johnhenry/servable/cli` and `adapters/node` re-exports servable's adapter, both of which use servable's own leserve. Only `examples/03-dialback-tunnel` and `test/dialback-integration.test.ts` import it (`@johnhenry/leserve/node-request`). The old `^0.0.0` runtime dependency next to servable 0.3.0's `^0.1.0` installed two copies; a fresh install now has one (`npm ls @johnhenry/leserve` shows servable's copy, deduped with the dev one in this repo).
 
