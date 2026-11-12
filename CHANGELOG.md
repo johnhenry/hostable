@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
+## [Unreleased]
+
+### Changed
+- **[#18] `@johnhenry/leserve` is a dev dependency again, at `^0.1.0`.** hostable's library code no longer imports it: the CLI runs `@johnhenry/servable/cli` and `adapters/node` re-exports servable's adapter, both of which use servable's own leserve. Only `examples/03-dialback-tunnel` and `test/dialback-integration.test.ts` import it (`@johnhenry/leserve/node-request`). The old `^0.0.0` runtime dependency next to servable 0.3.0's `^0.1.0` installed two copies; a fresh install now has one (`npm ls @johnhenry/leserve` shows servable's copy, deduped with the dev one in this repo).
+
 ## [0.2.0] - 2026-11-11
 
 ### Added
