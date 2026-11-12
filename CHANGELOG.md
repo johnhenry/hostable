@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once it reaches 1.0.0.
 
-## [Unreleased]
+## [0.3.0] - 2026-11-12
 
 ### Added
 - **[servable#24] `backend` on the 502/504 `request` event.** A failed `<Upstream url=>` fetch's `request` event now carries the same `backend` as its `E_UPSTREAM` event, through servable's new `requestError` return form `{ response, fields }`. Additive in schema `v: 1`. A `handler=`/`app=` upstream's own failed `fetch()` still gets no `backend`. Needs the servable release that contains servable#24; the `@johnhenry/servable` floor must be raised to it before this merges. README: "The `E_UPSTREAM` event".
