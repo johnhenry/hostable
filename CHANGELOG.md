@@ -8,7 +8,7 @@ and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2
 ## [0.3.0] - 2026-11-12
 
 ### Added
-- **[servable#24] `backend` on the 502/504 `request` event.** A failed `<Upstream url=>` fetch's `request` event now carries the same `backend` as its `E_UPSTREAM` event, through servable's new `requestError` return form `{ response, fields }`. Additive in schema `v: 1`. A `handler=`/`app=` upstream's own failed `fetch()` still gets no `backend`. Needs the servable release that contains servable#24; the `@johnhenry/servable` floor must be raised to it before this merges. README: "The `E_UPSTREAM` event".
+- **[servable#24] `backend` on the 502/504 `request` event.** A failed `<Upstream url=>` fetch's `request` event now carries the same `backend` as its `E_UPSTREAM` event, through servable's new `requestError` return form `{ response, fields }`. Additive in schema `v: 1`. A `handler=`/`app=` upstream's own failed `fetch()` still gets no `backend`. Needs servable 0.4.0, the release with servable#24. README: "The `E_UPSTREAM` event".
 
 ### Changed
 - **[servable#24] `@johnhenry/servable` range raised to `>=0.4.0 <0.5.0`**, the first release where `requestError` can add fields to the `request` event.
